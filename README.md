@@ -95,8 +95,10 @@ cmake --build build --config Release
 build\Release\gpu-psu-stress.exe
 ```
 
-Se CMake non trova il toolkit CUDA (errore *"The CUDA Toolkit directory '' does not exist"*),
-indicagli il percorso:
+Se la variabile d'ambiente `CUDA_PATH` non è impostata, CMake usa automaticamente il
+toolkit del `nvcc` che trova nel `PATH`. Se compare comunque l'errore
+*"The CUDA Toolkit directory '' does not exist"*, cancella la cartella `build` (conserva la
+configurazione fallita) e indica il percorso esplicitamente:
 
 ```bat
 cmake -B build -T "cuda=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8"
