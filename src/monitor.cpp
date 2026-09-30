@@ -30,6 +30,7 @@ Monitor::~Monitor() {
 
 void Monitor::start(int sampleMs) {
     if (running_.exchange(true)) return;
+    t0_ = std::chrono::steady_clock::now();
     thread_ = std::thread(&Monitor::run, this, sampleMs);
 }
 

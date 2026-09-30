@@ -87,6 +87,7 @@ void printSummary(const std::vector<Sample>& samples, const std::vector<std::str
         "\nATTENZIONE: NVML campiona ogni ~10-100 ms e NON vede i transienti sotto il\n"
         "millisecondo, che possono superare di molto i valori qui sopra. Questo tool li provoca:\n"
         "il verdetto reale è se il PC arriva in fondo senza spegnersi o riavviarsi.\n");
+    std::fflush(stdout);
 }
 
 bool writeCsv(const std::string& path, const std::vector<Sample>& samples,

@@ -1,44 +1,319 @@
-// gpu-psu-stress: milestone 4, sequenza completa dei pattern (solo --scale).
+// gpu-psu-stress: genera transienti di potenza sulla GPU per verificare la tenuta
+// dell'alimentatore, monitorando potenza, clock e temperatura tramite NVML.
 
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <timeapi.h>
+#endif
 
 #include "check.hpp"
+#include "kernels.cuh"
 #include "loads.hpp"
 #include "monitor.hpp"
 #include "patterns.hpp"
 #include "report.hpp"
 
-int main(int argc, char** argv) {
-    double scale = 1.0;
-    if (argc == 3 && std::strcmp(argv[1], "--scale") == 0) scale = std::atof(argv[2]);
+namespace {
 
+struct Options {
+    double scale = 1.0;
+    int sampleMs = 10;
     int device = 0;
-    CK(cudaSetDevice(device));
-    cudaDeviceProp prop{};
-    CK(cudaGetDeviceProperties(&prop, device));
+    std::string out = "power_log.csv";
+    std::string only;  // "", "sustained", "square", "burst"
+    bool list = false;
+};
+
+void printHelp(const char* prog) {
+    std::printf(
+        "Uso: %s [opzioni]\n"
+        "\n"
+        "Mette sotto stress la GPU con carichi sostenuti, onde quadre e burst da idle per\n"
+        "verificare se l'alimentatore regge i picchi transitori di assorbimento.\n"
+        "\n"
+        "Opzioni:\n"
+        "  --scale X        moltiplicatore di tutte le durate (default 1.0, circa 4 minuti;\n"
+        "                   i burst da 300 ms non vengono scalati)\n"
+        "  --sample-ms N    periodo di campionamento NVML in ms (default 10, minimo 1)\n"
+        "  --device N       indice della GPU CUDA da usare (default 0)\n"
+        "  --out FILE       file CSV di uscita (default power_log.csv)\n"
+        "  --only GRUPPO    esegue solo un gruppo: sustained, square o burst\n"
+        "                   (la fase di idle iniziale viene eseguita sempre)\n"
+        "  --list           stampa la sequenza delle fasi con le durate stimate ed esce\n"
+        "  -h, --help       mostra questo aiuto\n"
+        "\n"
+        "Ctrl+C interrompe il test: riepilogo e CSV vengono scritti comunque.\n",
+        prog);
+}
+
+[[noreturn]] void usageError(const char* prog, const std::string& msg) {
+    std::fprintf(stderr, "Errore: %s\n\n", msg.c_str());
+    printHelp(prog);
+    std::exit(2);
+}
+
+bool parseDouble(const char* s, double& v) {
+    char* end = nullptr;
+    v = std::strtod(s, &end);
+    return end != s && *end == '\0';
+}
+
+bool parseInt(const char* s, int& v) {
+    char* end = nullptr;
+    long l = std::strtol(s, &end, 10);
+    if (end == s || *end != '\0' || l < -1000000 || l > 1000000) return false;
+    v = static_cast<int>(l);
+    return true;
+}
+
+Options parseArgs(int argc, char** argv) {
+    Options o;
+    const char* prog = argv[0];
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        auto value = [&]() -> const char* {
+            if (i + 1 >= argc) usageError(prog, "manca il valore per " + a);
+            return argv[++i];
+        };
+        if (a == "-h" || a == "--help") {
+            printHelp(prog);
+            std::exit(0);
+        } else if (a == "--scale") {
+            const char* v = value();
+            if (!parseDouble(v, o.scale) || !(o.scale > 0.0) || o.scale > 100.0)
+                usageError(prog, std::string("--scale deve essere un numero in (0, 100], ricevuto '") + v + "'");
+        } else if (a == "--sample-ms") {
+            const char* v = value();
+            if (!parseInt(v, o.sampleMs) || o.sampleMs < 1 || o.sampleMs > 10000)
+                usageError(prog, std::string("--sample-ms deve essere un intero tra 1 e 10000, ricevuto '") + v + "'");
+        } else if (a == "--device") {
+            const char* v = value();
+            if (!parseInt(v, o.device) || o.device < 0)
+                usageError(prog, std::string("--device deve essere un intero >= 0, ricevuto '") + v + "'");
+        } else if (a == "--out") {
+            o.out = value();
+            if (o.out.empty()) usageError(prog, "--out richiede un nome di file");
+        } else if (a == "--only") {
+            o.only = value();
+            if (o.only != "sustained" && o.only != "square" && o.only != "burst")
+                usageError(prog, "--only accetta sustained, square o burst, ricevuto '" + o.only + "'");
+        } else if (a == "--list") {
+            o.list = true;
+        } else {
+            usageError(prog, "opzione sconosciuta '" + a + "'");
+        }
+    }
+    return o;
+}
+
+// Contesto condiviso dai passi della sequenza; riempito dopo l'eventuale --list.
+struct Context {
+    Monitor* mon = nullptr;
+    LoadSet* loads = nullptr;
+    cudaStream_t s1 = nullptr;
+    cudaStream_t s2 = nullptr;
+};
+
+struct Step {
+    std::string label;
+    double sec;
+    std::function<void()> run;
+};
+
+std::vector<Step> buildPlan(const Options& o, Context& c) {
+    const double k = o.scale;
+    std::vector<Step> plan;
+    auto add = [&](const std::string& label, double sec, std::function<void()> fn) {
+        plan.push_back({label, sec, std::move(fn)});
+    };
+    auto cooldown = [&](double base) {
+        const double sec = base * k;
+        add("_cooldown", sec, [&c, sec] { idle(*c.mon, "_cooldown", sec); });
+    };
+    auto sustainedStep = [&](const std::string& name, double base,
+                             std::function<std::vector<StreamLoad>()> loads) {
+        const double sec = base * k;
+        add(name, sec, [&c, name, sec, loads] { sustained(*c.mon, name, loads(), sec); });
+    };
+
+    add("Idle baseline", 5 * k, [&c, k] { idle(*c.mon, "Idle baseline", 5 * k); });
+    if (o.only.empty() || o.only == "sustained") {
+        sustainedStep("FMA FP32 sostenuto", 20, [&c] {
+            return std::vector<StreamLoad>{{c.loads->fma, c.s1}};
+        });
+        cooldown(5);
+        sustainedStep("Tensor FP16 sostenuto", 20, [&c] {
+            return std::vector<StreamLoad>{{c.loads->tensor, c.s1}};
+        });
+        cooldown(5);
+        sustainedStep("Memoria VRAM sostenuto", 15, [&c] {
+            return std::vector<StreamLoad>{{c.loads->mem, c.s1}};
+        });
+        cooldown(5);
+        sustainedStep("Tensor + memoria (max)", 30, [&c] {
+            return std::vector<StreamLoad>{{c.loads->tensor, c.s1}, {c.loads->mem, c.s2}};
+        });
+        cooldown(5);
+    }
+    if (o.only.empty() || o.only == "square") {
+        for (double hz : {1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0}) {
+            const double sec = 10 * k;
+            add(squareWaveName(hz), sec, [&c, hz, sec] {
+                squareWave(*c.mon, hz, c.loads->tensorShort, c.s1, sec);
+            });
+            cooldown(3);
+        }
+    }
+    if (o.only.empty() || o.only == "burst") {
+        const int cycles = 10;
+        const double idleSec = 3 * k;
+        const double burstSec = 0.3;  // non scalato: è la durata del transitorio
+        char label[96];
+        std::snprintf(label, sizeof(label), "Burst da idle (%d x %.3g s idle + %.0f ms)", cycles,
+                      idleSec, burstSec * 1000);
+        add(label, cycles * (idleSec + burstSec),
+            [&c, cycles, idleSec, burstSec] {
+                burstFromIdle(*c.mon, cycles, idleSec, burstSec,
+                              {{c.loads->tensor, c.s1}, {c.loads->mem, c.s2}});
+            });
+    }
+    return plan;
+}
+
+void printPlan(const std::vector<Step>& plan) {
+    std::printf("Sequenza delle fasi (durate stimate, calibrazione esclusa):\n");
+    double t = 0.0;
+    for (const Step& s : plan) {
+        std::printf("  %8.1f s  %7.2f s  %s\n", t, s.sec, s.label.c_str());
+        t += s.sec;
+    }
+    std::printf("Totale stimato: %.1f s (%.1f minuti)\n", t, t / 60.0);
+}
+
+void onSignal(int) { g_stopRequested = true; }
+
+double limitW(nvmlReturn_t r, unsigned int mw) { return (r == NVML_SUCCESS && mw > 0) ? mw / 1000.0 : -1.0; }
+
+void printGpuInfo(int device, const cudaDeviceProp& prop, const Monitor& mon) {
+    unsigned int enforced = 0, def = 0;
+    double enforcedW = limitW(nvmlDeviceGetEnforcedPowerLimit(mon.handle(), &enforced), enforced);
+    double defW = limitW(nvmlDeviceGetPowerManagementDefaultLimit(mon.handle(), &def), def);
+    auto fmt = [](double w) {
+        char b[32];
+        if (w < 0) std::snprintf(b, sizeof(b), "n/d");
+        else std::snprintf(b, sizeof(b), "%.0f W", w);
+        return std::string(b);
+    };
     std::printf("GPU %d: %s\n", device, prop.name);
+    std::printf("  SM: %d | compute capability %d.%d | VRAM %.1f GB\n", prop.multiProcessorCount,
+                prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
+    std::printf("  Power limit attivo: %s | di default: %s\n", fmt(enforcedW).c_str(),
+                fmt(defW).c_str());
+    std::printf("  Potenza istantanea NVML: %s\n\n",
+                mon.instantPowerSupported() ? "disponibile" : "non disponibile (colonna = -1)");
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+    Options opt = parseArgs(argc, argv);
+
+    Context ctx;
+    std::vector<Step> plan = buildPlan(opt, ctx);
+    if (opt.list) {
+        printPlan(plan);
+        return 0;
+    }
+
+    int deviceCount = 0;
+    CK(cudaGetDeviceCount(&deviceCount));
+    if (opt.device >= deviceCount) {
+        std::fprintf(stderr, "Errore: --device %d non valido, GPU CUDA disponibili: %d\n",
+                     opt.device, deviceCount);
+        return 2;
+    }
+    CK(cudaSetDevice(opt.device));
+    cudaDeviceProp prop{};
+    CK(cudaGetDeviceProperties(&prop, opt.device));
+
+    // Il binario contiene codice per questa GPU?
+    cudaFuncAttributes attr{};
+    if (cudaFuncGetAttributes(&attr, fmaBurn) != cudaSuccess) {
+        std::fprintf(stderr,
+                     "Errore: il programma non è compilato per questa GPU (compute capability "
+                     "%d.%d).\nRicompila con -DCMAKE_CUDA_ARCHITECTURES=%d%d\n",
+                     prop.major, prop.minor, prop.major, prop.minor);
+        return 1;
+    }
+
+    Monitor mon(opt.device);
+    printGpuInfo(opt.device, prop, mon);
+    if (prop.major < 7)
+        std::printf("Nota: GPU senza tensor core, il carico tensor usa FMA come ripiego.\n\n");
+
+#ifdef _WIN32
+    timeBeginPeriod(1);  // sleep con granularità di 1 ms per monitor e idle
+#endif
+    std::signal(SIGINT, onSignal);
+    std::signal(SIGTERM, onSignal);
+#ifdef SIGBREAK
+    std::signal(SIGBREAK, onSignal);  // Ctrl+Break su Windows
+#endif
 
     cudaStream_t s1, s2;
     CK(cudaStreamCreateWithFlags(&s1, cudaStreamNonBlocking));
     CK(cudaStreamCreateWithFlags(&s2, cudaStreamNonBlocking));
-    LoadSet L;
-    L.init(prop, s1);
+    LoadSet loads;
+    loads.init(prop, s1);
+    ctx = Context{&mon, &loads, s1, s2};
 
-    Monitor mon(device);
-    mon.start(10);
-    idle(mon, "Idle baseline", 5 * scale);
-    sustained(mon, "FMA FP32", {{L.fma, s1}}, 20 * scale);
-    idle(mon, "_cooldown", 5 * scale);
-    sustained(mon, "Tensor + memoria", {{L.tensor, s1}, {L.mem, s2}}, 30 * scale);
-    idle(mon, "_cooldown", 5 * scale);
-    for (double hz : {1.0, 10.0, 200.0}) {
-        squareWave(mon, hz, L.tensorShort, s1, 10 * scale);
-        idle(mon, "_cooldown", 3 * scale);
+    printPlan(plan);
+    std::printf("\nAvvio del test. Premi Ctrl+C per interrompere.\n");
+    mon.start(opt.sampleMs);
+    for (const Step& s : plan) {
+        if (g_stopRequested) break;
+        s.run();
     }
-    burstFromIdle(mon, 3, 3 * scale, 0.3, {{L.tensor, s1}, {L.mem, s2}});
+    CK(cudaDeviceSynchronize());
+    // Qualche campione finale a riposo per chiudere il log.
+    if (!g_stopRequested) idle(mon, "_fine", 0.2);
     mon.stop();
-    writeCsv("power_log.csv", mon.samples(), mon.phaseNames());
-    return 0;
+
+    const bool interrupted = g_stopRequested;
+    if (interrupted) std::printf("\nInterrotto dall'utente: salvo i dati raccolti finora.\n");
+
+    unsigned int enforced = 0;
+    double enforcedW = limitW(nvmlDeviceGetEnforcedPowerLimit(mon.handle(), &enforced), enforced);
+    const auto samples = mon.samples();
+    const auto phases = mon.phaseNames();
+    printSummary(samples, phases, enforcedW);
+
+    int rc = interrupted ? 130 : 0;
+    if (writeCsv(opt.out, samples, phases)) {
+        std::printf("\nLog salvato in %s (%zu campioni).\n", opt.out.c_str(), samples.size());
+        std::fflush(stdout);
+    } else {
+        std::fprintf(stderr, "\nErrore: impossibile scrivere %s\n", opt.out.c_str());
+        rc = 1;
+    }
+
+    CK(cudaStreamDestroy(s1));
+    CK(cudaStreamDestroy(s2));
+#ifdef _WIN32
+    timeEndPeriod(1);
+#endif
+    return rc;
 }
