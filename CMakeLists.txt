@@ -52,6 +52,7 @@ add_executable(gpu-psu-stress
     src/kernels.cu
     src/loads.cu
     src/monitor.cpp
+    src/patterns.cpp
     src/report.cpp
 )
 
