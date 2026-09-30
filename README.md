@@ -104,6 +104,24 @@ configurazione fallita) e indica il percorso esplicitamente:
 cmake -B build -T "cuda=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8"
 ```
 
+### Compilare su un PC senza la GPU di destinazione
+
+Per compilare non serve avere la scheda: basta il toolkit CUDA giusto. Si può anche creare
+**un solo eseguibile per più GPU**, ad esempio per provarlo sul PC di sviluppo (qui una
+scheda Turing, `75`) e poi usarlo sulla RTX 5070 (`120`):
+
+```bat
+cmake -B build -DCMAKE_CUDA_ARCHITECTURES="75;120"
+cmake --build build --config Release
+```
+
+- Serve **CUDA 12.8 o 12.9**, che si può installare accanto a una versione più vecchia.
+  Nell'installazione personalizzata puoi togliere il driver e tenere quello attuale.
+- CUDA 13.x richiede un driver ≥ 580: un eseguibile compilato con CUDA 13 non parte sui PC
+  con driver più vecchi.
+- Sul PC di destinazione **non serve installare CUDA**: basta il driver NVIDIA (il runtime
+  CUDA è incluso nell'eseguibile, NVML arriva con il driver).
+
 ## Uso
 
 ```
