@@ -49,6 +49,8 @@ find_package(Threads REQUIRED)
 
 add_executable(gpu-psu-stress
     src/main.cu
+    src/monitor.cpp
+    src/report.cpp
 )
 
 target_link_libraries(gpu-psu-stress PRIVATE CUDA::cudart CUDA::nvml Threads::Threads)
