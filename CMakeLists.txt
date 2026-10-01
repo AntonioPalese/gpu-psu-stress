@@ -68,6 +68,10 @@ endif()
 
 project(gpu-psu-stress LANGUAGES CXX CUDA)
 
+# Su Windows anche il runtime C++ di MSVC è statico: niente Visual C++ Redistributable
+# sul PC di destinazione.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
@@ -89,7 +93,10 @@ add_executable(gpu-psu-stress
     src/report.cpp
 )
 
-target_link_libraries(gpu-psu-stress PRIVATE CUDA::cudart CUDA::nvml Threads::Threads)
+# Runtime CUDA statico: l'eseguibile gira con il solo driver NVIDIA, senza CUDA installato.
+# NVML invece arriva sempre con il driver (nvml.dll / libnvidia-ml.so.1).
+set_target_properties(gpu-psu-stress PROPERTIES CUDA_RUNTIME_LIBRARY Static)
+target_link_libraries(gpu-psu-stress PRIVATE CUDA::cudart_static CUDA::nvml Threads::Threads)
 
 if(MSVC)
     # Sorgenti e output in UTF-8 (accenti italiani).
