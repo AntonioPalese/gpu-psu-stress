@@ -6,8 +6,6 @@ alone, then GPU and CPU together, repeating the hardest tests several times.
 
 To build the executable on another PC see [build-plan-sm120.md](build-plan-sm120.md).
 
-The program's output is in Italian: messages and file names are quoted here as they appear.
-
 ## Software needed
 
 The minimum:
@@ -48,32 +46,33 @@ command prompt).
 
 | # | Test (file name) | Parameters | Duration |
 |---|---|---|---|
-| 01 | `prova_breve_gpu_sola` (short trial, GPU only) | `--scale 0.05` | ~20 s |
-| 02 | `completo_gpu_sola_scala1` (full, GPU only, scale 1) | `--scale 1` | ~4 min |
-| 03 | `completo_gpu_sola_scala2` (full, GPU only, scale 2) | `--scale 2` | ~8 min |
-| 04-05 | `completo_gpu_cpu_scala2_run1..2` (full, GPU + CPU) | `--cpu --scale 2` | ~9 min each |
-| 06-08 | `onde_quadre_gpu_cpu_scala2_run1..3` (square waves, GPU + CPU) | `--cpu --only square --scale 2` | ~5 min each |
-| 09-11 | `burst_gpu_cpu_scala2_run1..3` (bursts, GPU + CPU) | `--cpu --only burst --scale 2` | ~2 min each |
+| 01 | `short_trial_gpu_only` | `--scale 0.05` | ~20 s |
+| 02 | `full_gpu_only_scale1` | `--scale 1` | ~4 min |
+| 03 | `full_gpu_only_scale2` | `--scale 2` | ~8 min |
+| 04-05 | `full_gpu_cpu_scale2_run1..2` | `--cpu --scale 2` | ~9 min each |
+| 06-08 | `square_waves_gpu_cpu_scale2_run1..3` | `--cpu --only square --scale 2` | ~5 min each |
+| 09-11 | `bursts_gpu_cpu_scale2_run1..3` | `--cpu --only burst --scale 2` | ~2 min each |
 
 In tests 04-11 the program also loads all CPU cores (`--cpu`), with a 60 s warm-up at the
 start of each test. There is a 30 s pause between tests. About 55 minutes in total, with no
 questions: you can leave it running on its own.
 
-Everything ends up in `gpu-psu-out\sessione_YYYYMMDD_HHMMSS\`, next to the `.bat`:
+Everything ends up in `gpu-psu-out\session_YYYYMMDD_HHMMSS\`, next to the `.bat`:
 
 - `NN_<test>.csv`: the samples, from which `plot_log.py` draws the charts;
 - `NN_<test>.log`: the complete program output (calibration, phases, summary), with the
   command at the top and the exit code at the bottom;
-- `sessione.log`: GPU, driver and power limit (from `nvidia-smi`), time and outcome of each test.
+- `session.log`: GPU, driver and power limit (from `nvidia-smi`), time and outcome of each test.
 
-Ctrl+C stops the running test, and the CSV is still saved. When asked
-*"Terminare il processo batch (S/N)?"* ("Terminate batch job (Y/N)?") answer **N** to move on
-to the next test, **S** to stop everything. After a Ctrl+C the end of that test's `.log` may
+Ctrl+C stops the running test, and the CSV is still saved. When Windows asks
+*"Terminate batch job (Y/N)?"* (on an Italian Windows: *"Terminare il processo batch (S/N)?"*)
+answer **N** to move on to the next test, **Y** (or **S**) to stop everything. After a Ctrl+C the end of that test's `.log` may
 be missing: the CSV is still complete up to the moment of the interruption.
 
 To check that the script works before the real session:
-`run_all_tests.bat rapido` runs all 11 tests with minimal durations (~2-3 minutes), with no
-questions or pauses, and writes to `gpu-psu-out\rapido_...`.
+`run_all_tests.bat quick` (or `rapido`) runs all 11 tests with minimal durations (~2-3 minutes),
+with no questions or pauses, and writes to `gpu-psu-out\quick_...`. Its tables and charts are
+not meaningful (the phases are shorter than the NVML averaging window): it only tests the script.
 
 ## 0. Preparation (once)
 
@@ -91,29 +90,29 @@ questions or pauses, and writes to `gpu-psu-out\rapido_...`.
 
 ```powershell
 .\gpu-psu-stress.exe --list
-.\gpu-psu-stress.exe --scale 0.05 --out prova.csv
+.\gpu-psu-stress.exe --scale 0.05 --out trial.csv
 ```
 
 Check that:
 
-- the **enforced power limit** (`Power limit attivo`) is about 250 W;
+- the **enforced power limit** (`Enforced power limit`) is about 250 W;
 - the **calibrations** reach about 2.0 ms and 0.5 ms;
-- the **`Potenza istantanea NVML`** (NVML instantaneous power) line says `disponibile` (available).
+- the **`NVML instantaneous power`** line says `available`.
 
 If something does not add up, stop and analyze the output before going on.
 
 ## 2. GPU only (about 4 minutes)
 
 ```powershell
-.\gpu-psu-stress.exe --out gpu_sola.csv
-python plot_log.py gpu_sola.csv --out gpu_sola.png --limit 250
+.\gpu-psu-stress.exe --out gpu_only.csv
+python plot_log.py gpu_only.csv --out gpu_only.png --limit 250
 ```
 
 What to expect:
 
 - in the sustained loads the power is close to 250 W;
 - if the clocks drop while the temperature rises, the card is throttling because of heat;
-- in the table, **`Max ist. W` must differ from `Max W`**: this shows that the instantaneous
+- in the table, **`Max inst. W` must differ from `Max W`**: this shows that the instantaneous
   power reading really works (on the development MX550 they were identical).
 
 ## 3. Worst case: GPU and CPU together
@@ -123,8 +122,7 @@ What to expect:
    ```powershell
    .\gpu-psu-stress.exe --cpu --scale 2 --out gpu_cpu.csv
    ```
-   At the end of the test check the `Carico CPU: ... GFLOPS medi` (CPU load, average GFLOPS)
-   line: it confirms that the load ran. As an alternative to `--cpu` you can still use OCCT
+   At the end of the test check the `CPU load: ... GFLOPS average` line: it confirms that the load ran. As an alternative to `--cpu` you can still use OCCT
    or Prime95 Small FFTs.
 2. Repeat the tests that cause transients several times, because a PSU protection trip is a
    random event and a single run says little:
@@ -141,7 +139,7 @@ What to expect:
   - **Kernel-Power 41**: sudden shutdown, i.e. the power supply cut the power;
   - **Display 4101**: the display driver hung and recovered by itself. This is a GPU or
     driver problem, not a power supply one.
-- Compare the `gpu_sola` and `gpu_cpu` charts.
+- Compare the `gpu_only` and `gpu_cpu` charts.
 
 ## 5. How to read the outcome
 

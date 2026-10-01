@@ -16,12 +16,12 @@ struct PhaseStats {
 };
 
 void formatW(char* buf, size_t n, double w) {
-    if (w < 0) std::snprintf(buf, n, "n/d");
+    if (w < 0) std::snprintf(buf, n, "n/a");
     else std::snprintf(buf, n, "%.1f", w);
 }
 
 void formatInt(char* buf, size_t n, int v) {
-    if (v < 0) std::snprintf(buf, n, "n/d");
+    if (v < 0) std::snprintf(buf, n, "n/a");
     else std::snprintf(buf, n, "%d", v);
 }
 
@@ -55,9 +55,9 @@ void printSummary(const std::vector<Sample>& samples, const std::vector<std::str
         }
     }
 
-    std::printf("\n==================================== RIEPILOGO ====================================\n");
-    std::printf("%-28s %8s %9s %9s %12s %10s %8s\n", "Fase", "Campioni", "Media W", "Max W",
-                "Max ist. W", "Max SM MHz", "Max temp");
+    std::printf("\n===================================== SUMMARY =====================================\n");
+    std::printf("%-28s %8s %9s %9s %12s %10s %8s\n", "Phase", "Samples", "Avg W", "Max W",
+                "Max inst. W", "Max SM MHz", "Max temp");
     std::printf("-----------------------------------------------------------------------------------\n");
     for (int idx : order) {
         if (Monitor::isHidden(phases[idx])) continue;
@@ -74,19 +74,19 @@ void printSummary(const std::vector<Sample>& samples, const std::vector<std::str
     std::printf("-----------------------------------------------------------------------------------\n");
 
     if (peakW >= 0) {
-        std::printf("Picco globale: %.1f W (fase \"%s\")", peakW, peakPhase.c_str());
+        std::printf("Global peak: %.1f W (phase \"%s\")", peakW, peakPhase.c_str());
         if (enforcedLimitW > 0)
-            std::printf(", %.0f%% del power limit attivo (%.0f W)", 100.0 * peakW / enforcedLimitW,
+            std::printf(", %.0f%% of the enforced power limit (%.0f W)", 100.0 * peakW / enforcedLimitW,
                         enforcedLimitW);
         std::printf("\n");
     } else {
-        std::printf("Picco globale: n/d (questa GPU non riporta la potenza tramite NVML)\n");
+        std::printf("Global peak: n/a (this GPU does not report power through NVML)\n");
     }
 
     std::printf(
-        "\nATTENZIONE: NVML campiona ogni ~10-100 ms e NON vede i transienti sotto il\n"
-        "millisecondo, che possono superare di molto i valori qui sopra. Questo tool li provoca:\n"
-        "il verdetto reale è se il PC arriva in fondo senza spegnersi o riavviarsi.\n");
+        "\nWARNING: NVML samples every ~10-100 ms and does NOT see sub-millisecond transients,\n"
+        "which can be much higher than the values above. This tool causes them: the real\n"
+        "verdict is whether the PC reaches the end without shutting down or rebooting.\n");
     std::fflush(stdout);
 }
 

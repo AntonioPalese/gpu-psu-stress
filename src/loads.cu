@@ -62,7 +62,7 @@ Launch calibrate(const ParamLaunch& paramLaunch, cudaStream_t stream, double tar
         ms = measureMs(paramLaunch, stream, iters, a, b);
     }
 
-    std::printf("  Calibrazione %-14s %10d iterazioni -> %.3f ms (obiettivo %.1f ms)\n",
+    std::printf("  Calibration %-16s %10d iterations -> %.3f ms (target %.1f ms)\n",
                 (name + ":").c_str(), iters, ms, targetMs);
     std::fflush(stdout);
 
@@ -103,12 +103,12 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
         bytes -= bytes % align;
     }
     if (bytes < align) {
-        std::fprintf(stderr, "Memoria GPU libera insufficiente per il test di memoria.\n");
+        std::fprintf(stderr, "Not enough free GPU memory for the memory test.\n");
         std::exit(EXIT_FAILURE);
     }
     const double gb = 1024.0 * 1024.0 * 1024.0;
-    std::printf("  Memoria: 2 buffer da %.2f GB = %.2f GB su %.2f GB di VRAM (%.0f%%), "
-                "%.2f GB lasciati liberi\n",
+    std::printf("  Memory: 2 buffers of %.2f GB = %.2f GB of %.2f GB VRAM (%.0f%%), "
+                "%.2f GB left free\n",
                 bytes / gb, 2.0 * bytes / gb, totalB / gb, 100.0 * 2.0 * bytes / double(totalB),
                 (freeB - 2 * bytes) / gb);
     memElems_ = bytes / sizeof(float4);
@@ -138,13 +138,13 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
         CK(cudaGetLastError());
     };
 
-    std::printf("Calibrazione dei carichi...\n");
+    std::printf("Calibrating the loads...\n");
     fma = calibrate(fmaP, stream, 2.0, "FMA");
     // Square waves and bursts use FMA: on the RTX 5070 it is the most power-hungry load
     // (~245 W, at the power limit) versus ~100 W for the tensor kernel.
     fmaShort = calibrate(fmaP, stream, 0.5, "FMA short");
     tensor = calibrate(tensorP, stream, 2.0, "Tensor");
-    mem = calibrate(memP, stream, 2.0, "Memoria");
+    mem = calibrate(memP, stream, 2.0, "Memory");
 }
 
 LoadSet::~LoadSet() {

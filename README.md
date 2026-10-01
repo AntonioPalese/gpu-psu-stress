@@ -4,9 +4,6 @@ A small command-line program that stresses an NVIDIA graphics card to find out w
 **power supply (PSU)** can handle its power spikes. It is designed for an
 **RTX 5070 (250 W) with a 650 W power supply**, but it works on any recent NVIDIA GPU.
 
-The program's messages, summary table and phase names are in Italian; this guide quotes them
-as they appear and explains what they mean.
-
 > ⚠️ **Warning.** The test pushes the GPU to the maximum for several minutes. Use it with a
 > well-ventilated case, keep an eye on the temperature and stop it with **Ctrl+C** if it
 > reaches abnormal levels (for a desktop card, steadily above 85-90 °C).
@@ -184,8 +181,8 @@ gpu-psu-stress --cpu --scale 2          # worst case: GPU and CPU at full load t
 - The threads run at **low priority**: the CPU stays at 100%, but the thread driving the GPU
   and the NVML monitor are served first, so the square-wave timing stays accurate.
 - At the end of the test a line like
-  `Carico CPU: 20 thread (AVX2+FMA), 614.0 GFLOPS medi per 58 s` ("CPU load: 20 threads,
-  614.0 average GFLOPS over 58 s") confirms that the load ran. If the value drops a lot from
+  `CPU load: 20 threads (AVX2+FMA), 614.0 GFLOPS average over 58 s` confirms that the load
+  ran. If the value drops a lot from
   one test to the next, the CPU is overheating.
 - CPU temperature and power are **not** measured (that would require administrator
   privileges) and are not in the CSV.
@@ -198,12 +195,12 @@ written with the data collected up to that point (exit code 130).
 | Phase | Name in the output | Duration |
 |---|---|---|
 | Idle baseline | `Idle baseline` | 5 s |
-| Sustained FP32 FMA | `FMA FP32 sostenuto` | 20 s |
-| Sustained FP16 tensor | `Tensor FP16 sostenuto` | 20 s |
-| Sustained VRAM | `Memoria VRAM sostenuto` | 15 s |
-| Tensor + memory (max) | `Tensor + memoria (max)` | 30 s |
-| Square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz | `Onda quadra N Hz` | 10 s each |
-| Bursts from idle: 10 cycles (3 s idle + 300 ms load) | `Burst da idle` | ~33 s |
+| Sustained FP32 FMA | `Sustained FP32 FMA` | 20 s |
+| Sustained FP16 tensor | `Sustained FP16 tensor` | 20 s |
+| Sustained VRAM | `Sustained VRAM memory` | 15 s |
+| Tensor + memory (max) | `Tensor + memory (max)` | 30 s |
+| Square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz | `Square wave N Hz` | 10 s each |
+| Bursts from idle: 10 cycles (3 s idle + 300 ms load) | `Burst from idle` | ~33 s |
 
 Between phases there is a 5 s cooldown (3 s after each square wave). Before starting, the
 program **calibrates** the loads for a few seconds so that each launch lasts a precise time
@@ -221,26 +218,25 @@ The memory test takes **all free VRAM**, leaving a margin for the desktop and ot
 programs (512 MB or 5% of the VRAM, whichever is larger), for example:
 
 ```
-  Memoria: 2 buffer da 5.20 GB = 10.40 GB su 11.94 GB di VRAM (87%), 0.62 GB lasciati liberi
+  Memory: 2 buffers of 5.20 GB = 10.40 GB of 11.94 GB VRAM (87%), 0.62 GB left free
 ```
 
-("Memory: 2 buffers of 5.20 GB = 10.40 GB out of 11.94 GB of VRAM (87%), 0.62 GB left free";
-indicative values: they depend on how much VRAM the display and other programs already use).
+(indicative values: they depend on how much VRAM the display and other programs already use).
 During the test the whole memory is swept, one chunk per launch.
 
 ### The final table
 
 | Column | Meaning |
 |---|---|
-| `Fase` | phase |
-| `Campioni` | how many NVML samples were taken in the phase |
-| `Media W` | average power of the phase |
+| `Phase` | phase name |
+| `Samples` | how many NVML samples were taken in the phase |
+| `Avg W` | average power of the phase |
 | `Max W` | maximum of the average power reported by NVML |
-| `Max ist. W` | maximum of the NVML "instantaneous" power (`n/d` = not available, if the GPU/driver does not provide it) |
+| `Max inst. W` | maximum of the NVML "instantaneous" power (`n/a` = not available, if the GPU/driver does not provide it) |
 | `Max SM MHz` | maximum core clock |
 | `Max temp` | maximum temperature in °C |
 
-Below the table there is the **global peak** (`Picco globale`) and its percentage of the
+Below the table there is the **global peak** (`Global peak`) and its percentage of the
 enforced power limit. Values around 100% of the power limit in the sustained loads are
 normal: the card is working at the maximum allowed. Remember, though, that the real
 transients, invisible to NVML, are higher.

@@ -16,7 +16,7 @@ ARCHS="${1:-120}"
 IMAGE="${CUDA_IMAGE:-docker.io/nvidia/cuda:12.8.1-devel-ubuntu24.04}"
 ENGINE="${ENGINE:-$(command -v podman || command -v docker || true)}"
 if [ -z "$ENGINE" ]; then
-    echo "ERRORE: serve podman o docker." >&2
+    echo "ERROR: podman or docker is required." >&2
     exit 1
 fi
 
@@ -32,7 +32,7 @@ fi
 # back to the user who ran the script.
 OWNER="$(id -u):$(id -g)"
 
-echo "Motore: $ENGINE | immagine: $IMAGE | architetture: $ARCHS"
+echo "Engine: $ENGINE | image: $IMAGE | architectures: $ARCHS"
 "$ENGINE" run --rm -v "$ROOT:/src" -w /src "$IMAGE" bash -euo pipefail -c "
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends cmake g++ make >/dev/null
@@ -40,4 +40,4 @@ echo "Motore: $ENGINE | immagine: $IMAGE | architetture: $ARCHS"
     cmake --build build-linux -j \$(nproc)
     chown -R '$OWNER' build-linux 2>/dev/null || true
 "
-echo "Binario Linux: build-linux/gpu-psu-stress"
+echo "Linux binary: build-linux/gpu-psu-stress"

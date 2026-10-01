@@ -2,7 +2,7 @@
 """Power, SM clock and temperature chart from the gpu-psu-stress CSV log.
 
 Usage:
-    python scripts/plot_log.py power_log.csv [--out grafico.png] [--limit W]
+    python scripts/plot_log.py power_log.csv [--out chart.png] [--limit W]
 
 Without --out the chart is shown in a window.
 """
@@ -38,7 +38,7 @@ def load_log(path: str) -> pd.DataFrame:
     df = pd.read_csv(path, keep_default_na=False)
     missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
     if missing:
-        sys.exit(f"Errore: colonne mancanti nel CSV: {', '.join(missing)}")
+        sys.exit(f"Error: columns missing from the CSV: {', '.join(missing)}")
     df["phase"] = df["phase"].astype(str)
     # -1 means "not available": it becomes NaN, so it stays out of charts and statistics.
     for col in EXPECTED_COLUMNS[2:]:
@@ -61,13 +61,13 @@ def segments(df: pd.DataFrame) -> list[tuple[str, float, float]]:
 
 
 def fmt(v: float, digits: int = 1) -> str:
-    return "n/d" if pd.isna(v) else f"{v:.{digits}f}"
+    return "n/a" if pd.isna(v) else f"{v:.{digits}f}"
 
 
 def print_summary(df: pd.DataFrame, limit: float | None) -> None:
     visible = df[~df["phase"].map(is_hidden)]
-    header = (f"{'Fase':<28} {'Campioni':>8} {'Media W':>9} {'Max W':>9} "
-              f"{'Max ist. W':>12} {'Max SM MHz':>10} {'Max temp':>8}")
+    header = (f"{'Phase':<28} {'Samples':>8} {'Avg W':>9} {'Max W':>9} "
+              f"{'Max inst. W':>12} {'Max SM MHz':>10} {'Max temp':>8}")
     print(header)
     print("-" * len(header))
     for phase, g in visible.groupby("phase", sort=False):
@@ -78,13 +78,13 @@ def print_summary(df: pd.DataFrame, limit: float | None) -> None:
     peak = df[["power_avg_W", "power_instant_W"]].max(axis=1)
     if peak.notna().any():
         i = peak.idxmax()
-        line = f"Picco globale: {peak[i]:.1f} W (fase \"{df.loc[i, 'phase']}\")"
+        line = f"Global peak: {peak[i]:.1f} W (phase \"{df.loc[i, 'phase']}\")"
         if limit:
-            line += f", {100 * peak[i] / limit:.0f}% del limite indicato ({limit:.0f} W)"
+            line += f", {100 * peak[i] / limit:.0f}% of the given limit ({limit:.0f} W)"
         print(line)
     else:
-        print("Picco globale: n/d (nessun dato di potenza nel log)")
-    print("Nota: NVML non vede i transienti sotto il millisecondo.")
+        print("Global peak: n/a (no power data in the log)")
+    print("Note: NVML does not see sub-millisecond transients.")
 
 
 def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> None:
@@ -120,17 +120,17 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
         visible_idx += 1
 
     t = df["t_s"]
-    ax_p.plot(t, df["power_avg_W"], color=C_AVG, lw=1.2, label="Potenza media (NVML)", zorder=3)
+    ax_p.plot(t, df["power_avg_W"], color=C_AVG, lw=1.2, label="Average power (NVML)", zorder=3)
     if df["power_instant_W"].notna().any():
         ax_p.plot(t, df["power_instant_W"], color=C_INSTANT, lw=0.8, alpha=0.9,
-                  label="Potenza istantanea (NVML)", zorder=2)
+                  label="Instantaneous power (NVML)", zorder=2)
     if limit:
         ax_p.axhline(limit, color=C_LIMIT, lw=1.2, ls="--", zorder=4)
-        ax_p.annotate(f"limite {limit:.0f} W", xy=(1, limit), xycoords=("axes fraction", "data"),
+        ax_p.annotate(f"limit {limit:.0f} W", xy=(1, limit), xycoords=("axes fraction", "data"),
                       xytext=(-4, 4), textcoords="offset points", ha="right", va="bottom",
                       color=C_TEXT_2, fontsize=8, zorder=5,
                       bbox={"facecolor": C_SURFACE, "edgecolor": "none", "alpha": 0.9, "pad": 1})
-    ax_p.set_ylabel("Potenza (W)")
+    ax_p.set_ylabel("Power (W)")
     # Headroom at the top: the legend sits above the data instead of covering full-load phases.
     top = df[["power_avg_W", "power_instant_W"]].max().max()
     if limit:
@@ -144,12 +144,12 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
     leg.set_zorder(5)
 
     ax_c.plot(t, df["sm_clock_MHz"], color=C_AVG, lw=1.0, zorder=3)
-    ax_c.set_ylabel("Clock SM (MHz)")
+    ax_c.set_ylabel("SM clock (MHz)")
     ax_c.set_ylim(bottom=0)
 
     ax_t.plot(t, df["temp_C"], color=C_AVG, lw=1.0, zorder=3)
-    ax_t.set_ylabel("Temperatura (°C)")
-    ax_t.set_xlabel("Tempo (s)")
+    ax_t.set_ylabel("Temperature (°C)")
+    ax_t.set_xlabel("Time (s)")
 
     for ax in axes:
         ax.set_facecolor(C_SURFACE)
@@ -173,21 +173,21 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
 
     if out:
         fig.savefig(out, dpi=130, facecolor=C_SURFACE)
-        print(f"Grafico salvato in {out}")
+        print(f"Chart saved to {out}")
     else:
         plt.show()
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Grafico del log CSV di gpu-psu-stress.")
-    ap.add_argument("csv", help="file CSV prodotto da gpu-psu-stress")
-    ap.add_argument("--out", help="salva il grafico in questo file (es. grafico.png) invece di mostrarlo")
-    ap.add_argument("--limit", type=float, help="disegna una linea orizzontale a W watt (es. power limit)")
+    ap = argparse.ArgumentParser(description="Chart of the gpu-psu-stress CSV log.")
+    ap.add_argument("csv", help="CSV file produced by gpu-psu-stress")
+    ap.add_argument("--out", help="save the chart to this file (e.g. chart.png) instead of showing it")
+    ap.add_argument("--limit", type=float, help="draw a horizontal line at W watts (e.g. the power limit)")
     args = ap.parse_args()
 
     df = load_log(args.csv)
     if df.empty:
-        sys.exit("Errore: il CSV non contiene campioni.")
+        sys.exit("Error: the CSV contains no samples.")
     print_summary(df, args.limit)
     plot(df, args.out, args.limit, f"gpu-psu-stress — {args.csv}")
 

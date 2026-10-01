@@ -100,7 +100,7 @@ set_target_properties(gpu-psu-stress PROPERTIES CUDA_RUNTIME_LIBRARY Static)
 target_link_libraries(gpu-psu-stress PRIVATE CUDA::cudart_static CUDA::nvml Threads::Threads)
 
 if(MSVC)
-    # UTF-8 sources and output (Italian accented characters).
+    # Sources and console output in UTF-8.
     target_compile_options(gpu-psu-stress PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:/utf-8>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>)

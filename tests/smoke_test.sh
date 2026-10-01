@@ -19,7 +19,7 @@ if [ -z "$BIN" ]; then
     done
 fi
 if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
-    echo "ERRORE: binario non trovato. Compila prima con: cmake -B build && cmake --build build"
+    echo "ERROR: binary not found. Build it first with: cmake -B build && cmake --build build"
     exit 1
 fi
 
@@ -28,9 +28,9 @@ trap 'rm -rf "$TMPDIR_SMOKE"' EXIT
 CSV="$TMPDIR_SMOKE/smoke.csv"
 LIMIT_S=30
 
-fail() { echo "FALLITO: $*"; exit 1; }
+fail() { echo "FAILED: $*"; exit 1; }
 
-echo "Binario: $BIN ${EXTRA[*]}"
+echo "Binary: $BIN ${EXTRA[*]}"
 start=$(date +%s)
 if command -v timeout >/dev/null 2>&1; then
     timeout "$((LIMIT_S + 10))" "$BIN" --scale 0.05 "${EXTRA[@]}" --out "$CSV" > "$TMPDIR_SMOKE/out.txt" 2>&1
@@ -42,42 +42,42 @@ elapsed=$(( $(date +%s) - start ))
 
 if [ $rc -ne 0 ]; then
     cat "$TMPDIR_SMOKE/out.txt"
-    fail "il programma è uscito con codice $rc"
+    fail "the program exited with code $rc"
 fi
-[ "$elapsed" -lt "$LIMIT_S" ] || fail "durata ${elapsed} s, limite ${LIMIT_S} s"
-[ -f "$CSV" ] || fail "il CSV $CSV non esiste"
+[ "$elapsed" -lt "$LIMIT_S" ] || fail "duration ${elapsed} s, limit ${LIMIT_S} s"
+[ -f "$CSV" ] || fail "the CSV $CSV does not exist"
 
 HEADER='t_s,phase,power_avg_W,power_instant_W,sm_clock_MHz,mem_clock_MHz,temp_C'
 first="$(head -n 1 "$CSV" | tr -d '\r')"
-[ "$first" = "$HEADER" ] || fail "intestazione errata: '$first'"
+[ "$first" = "$HEADER" ] || fail "wrong header: '$first'"
 
 # Non-hidden phases expected in the default sequence.
 PHASES=(
     "Idle baseline"
-    "FMA FP32 sostenuto"
-    "Tensor FP16 sostenuto"
-    "Memoria VRAM sostenuto"
-    "Tensor + memoria (max)"
-    "Onda quadra 1 Hz"
-    "Onda quadra 2 Hz"
-    "Onda quadra 5 Hz"
-    "Onda quadra 10 Hz"
-    "Onda quadra 20 Hz"
-    "Onda quadra 50 Hz"
-    "Onda quadra 100 Hz"
-    "Onda quadra 200 Hz"
-    "Burst da idle"
+    "Sustained FP32 FMA"
+    "Sustained FP16 tensor"
+    "Sustained VRAM memory"
+    "Tensor + memory (max)"
+    "Square wave 1 Hz"
+    "Square wave 2 Hz"
+    "Square wave 5 Hz"
+    "Square wave 10 Hz"
+    "Square wave 20 Hz"
+    "Square wave 50 Hz"
+    "Square wave 100 Hz"
+    "Square wave 200 Hz"
+    "Burst from idle"
 )
 missing=0
 for p in "${PHASES[@]}"; do
     n=$(tail -n +2 "$CSV" | tr -d '\r' | awk -F, -v p="$p" '$2 == p' | wc -l)
     if [ "$n" -lt 1 ]; then
-        echo "  manca la fase: $p"
+        echo "  missing phase: $p"
         missing=1
     else
-        printf '  %-26s %6d righe\n' "$p" "$n"
+        printf '  %-26s %6d rows\n' "$p" "$n"
     fi
 done
-[ $missing -eq 0 ] || fail "fasi mancanti nel CSV"
+[ $missing -eq 0 ] || fail "phases missing from the CSV"
 
-echo "OK: smoke test superato in ${elapsed} s ($(($(wc -l < "$CSV") - 1)) campioni)"
+echo "OK: smoke test passed in ${elapsed} s ($(($(wc -l < "$CSV") - 1)) samples)"

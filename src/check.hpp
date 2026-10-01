@@ -12,7 +12,7 @@
     do {                                                                      \
         cudaError_t ck_err_ = (call);                                         \
         if (ck_err_ != cudaSuccess) {                                         \
-            std::fprintf(stderr, "Errore CUDA in %s (%s:%d): %s\n", #call,    \
+            std::fprintf(stderr, "CUDA error in %s (%s:%d): %s\n", #call,    \
                          __FILE__, __LINE__, cudaGetErrorString(ck_err_));    \
             std::exit(EXIT_FAILURE);                                          \
         }                                                                     \
@@ -22,7 +22,7 @@
     do {                                                                      \
         nvmlReturn_t nk_err_ = (call);                                        \
         if (nk_err_ != NVML_SUCCESS) {                                        \
-            std::fprintf(stderr, "Errore NVML in %s (%s:%d): %s\n", #call,    \
+            std::fprintf(stderr, "NVML error in %s (%s:%d): %s\n", #call,    \
                          __FILE__, __LINE__, nvmlErrorString(nk_err_));       \
             std::exit(EXIT_FAILURE);                                          \
         }                                                                     \

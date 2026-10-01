@@ -58,10 +58,10 @@ Performed on 2026-10-01 with CUDA 12.8.61, driver 573.76, on the MX550.
 - [x] `bash tests/smoke_test.sh` passes on the MX550 in 17 s.
 - [x] `compute-sanitizer --tool memcheck build\Release\gpu-psu-stress.exe --scale 0.02`
       reports 0 errors.
-- [x] `Potenza istantanea NVML` line on the MX550: `disponibile` (available), but the value
+- [x] `NVML instantaneous power` line on the MX550: `available`, but the value
       matches the average (same maximum, 31.94 W). The laptop driver probably returns the
       same sensor.
-- [x] On the 5070 (tests `test1`-`test4`, 2026-10-01): `Max ist. W` differs from `Max W`
+- [x] On the 5070 (tests `test1`-`test4`, 2026-10-01): `Max inst. W` differs from `Max W`
       (e.g. 177 W vs 48 W in the bursts of `test2`), so the instantaneous reading really works.
 - [x] On the 5070: full test run (`test2` at scale 1, `test3`/`test4` at scale 2), all
       completed.

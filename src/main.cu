@@ -39,31 +39,31 @@ struct Options {
 
 void printHelp(const char* prog) {
     std::printf(
-        "Uso: %s [opzioni]\n"
+        "Usage: %s [options]\n"
         "\n"
-        "Mette sotto stress la GPU con carichi sostenuti, onde quadre e burst da idle per\n"
-        "verificare se l'alimentatore regge i picchi transitori di assorbimento.\n"
+        "Stresses the GPU with sustained loads, square waves and bursts from idle to check\n"
+        "whether the power supply can handle transient power spikes.\n"
         "\n"
-        "Opzioni:\n"
-        "  --scale X        moltiplicatore di tutte le durate (default 1.0, circa 4 minuti;\n"
-        "                   i burst da 300 ms non vengono scalati)\n"
-        "  --sample-ms N    periodo di campionamento NVML in ms (default 10, minimo 1)\n"
-        "  --device N       indice della GPU CUDA da usare (default 0)\n"
-        "  --out FILE       file CSV di uscita (default power_log.csv)\n"
-        "  --only GRUPPO    esegue solo un gruppo: sustained, square o burst\n"
-        "                   (la fase di idle iniziale viene eseguita sempre)\n"
-        "  --cpu            carica anche la CPU al massimo per tutto il test, in parallelo\n"
-        "                   alla GPU (un thread per processore logico)\n"
-        "  --cpu-threads N  come --cpu, ma con N thread (1-1024)\n"
-        "  --list           stampa la sequenza delle fasi con le durate stimate ed esce\n"
-        "  -h, --help       mostra questo aiuto\n"
+        "Options:\n"
+        "  --scale X        multiplier for all durations (default 1.0, about 4 minutes;\n"
+        "                   the 300 ms bursts are not scaled)\n"
+        "  --sample-ms N    NVML sampling period in ms (default 10, minimum 1)\n"
+        "  --device N       index of the CUDA GPU to use (default 0)\n"
+        "  --out FILE       output CSV file (default power_log.csv)\n"
+        "  --only GROUP     runs only one group: sustained, square or burst\n"
+        "                   (the initial idle phase always runs)\n"
+        "  --cpu            also loads the CPU to the maximum for the whole test, in parallel\n"
+        "                   with the GPU (one thread per logical processor)\n"
+        "  --cpu-threads N  like --cpu, but with N threads (1-1024)\n"
+        "  --list           prints the phase sequence with estimated durations and exits\n"
+        "  -h, --help       shows this help\n"
         "\n"
-        "Ctrl+C interrompe il test: riepilogo e CSV vengono scritti comunque.\n",
+        "Ctrl+C stops the test: the summary and the CSV are written anyway.\n",
         prog);
 }
 
 [[noreturn]] void usageError(const char* prog, const std::string& msg) {
-    std::fprintf(stderr, "Errore: %s\n\n", msg.c_str());
+    std::fprintf(stderr, "Error: %s\n\n", msg.c_str());
     printHelp(prog);
     std::exit(2);
 }
@@ -88,7 +88,7 @@ Options parseArgs(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         auto value = [&]() -> const char* {
-            if (i + 1 >= argc) usageError(prog, "manca il valore per " + a);
+            if (i + 1 >= argc) usageError(prog, "missing value for " + a);
             return argv[++i];
         };
         if (a == "-h" || a == "--help") {
@@ -97,33 +97,33 @@ Options parseArgs(int argc, char** argv) {
         } else if (a == "--scale") {
             const char* v = value();
             if (!parseDouble(v, o.scale) || !(o.scale > 0.0) || o.scale > 100.0)
-                usageError(prog, std::string("--scale deve essere un numero in (0, 100], ricevuto '") + v + "'");
+                usageError(prog, std::string("--scale must be a number in (0, 100], got '") + v + "'");
         } else if (a == "--sample-ms") {
             const char* v = value();
             if (!parseInt(v, o.sampleMs) || o.sampleMs < 1 || o.sampleMs > 10000)
-                usageError(prog, std::string("--sample-ms deve essere un intero tra 1 e 10000, ricevuto '") + v + "'");
+                usageError(prog, std::string("--sample-ms must be an integer between 1 and 10000, got '") + v + "'");
         } else if (a == "--device") {
             const char* v = value();
             if (!parseInt(v, o.device) || o.device < 0)
-                usageError(prog, std::string("--device deve essere un intero >= 0, ricevuto '") + v + "'");
+                usageError(prog, std::string("--device must be an integer >= 0, got '") + v + "'");
         } else if (a == "--out") {
             o.out = value();
-            if (o.out.empty()) usageError(prog, "--out richiede un nome di file");
+            if (o.out.empty()) usageError(prog, "--out requires a file name");
         } else if (a == "--only") {
             o.only = value();
             if (o.only != "sustained" && o.only != "square" && o.only != "burst")
-                usageError(prog, "--only accetta sustained, square o burst, ricevuto '" + o.only + "'");
+                usageError(prog, "--only accepts sustained, square or burst, got '" + o.only + "'");
         } else if (a == "--cpu") {
             o.cpu = true;
         } else if (a == "--cpu-threads") {
             const char* v = value();
             if (!parseInt(v, o.cpuThreads) || o.cpuThreads < 1 || o.cpuThreads > 1024)
-                usageError(prog, std::string("--cpu-threads deve essere un intero tra 1 e 1024, ricevuto '") + v + "'");
+                usageError(prog, std::string("--cpu-threads must be an integer between 1 and 1024, got '") + v + "'");
             o.cpu = true;
         } else if (a == "--list") {
             o.list = true;
         } else {
-            usageError(prog, "opzione sconosciuta '" + a + "'");
+            usageError(prog, "unknown option '" + a + "'");
         }
     }
     return o;
@@ -162,23 +162,23 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
     if (o.cpu) {
         // CPU power takes a few seconds to settle (temperature, boost).
         const double sec = 30 * k;
-        add("_riscaldamento CPU", sec, [&c, sec] { idle(*c.mon, "_riscaldamento CPU", sec); });
+        add("_CPU warm-up", sec, [&c, sec] { idle(*c.mon, "_CPU warm-up", sec); });
     }
     add("Idle baseline", 5 * k, [&c, k] { idle(*c.mon, "Idle baseline", 5 * k); });
     if (o.only.empty() || o.only == "sustained") {
-        sustainedStep("FMA FP32 sostenuto", 20, [&c] {
+        sustainedStep("Sustained FP32 FMA", 20, [&c] {
             return std::vector<StreamLoad>{{c.loads->fma, c.s1}};
         });
         cooldown(5);
-        sustainedStep("Tensor FP16 sostenuto", 20, [&c] {
+        sustainedStep("Sustained FP16 tensor", 20, [&c] {
             return std::vector<StreamLoad>{{c.loads->tensor, c.s1}};
         });
         cooldown(5);
-        sustainedStep("Memoria VRAM sostenuto", 15, [&c] {
+        sustainedStep("Sustained VRAM memory", 15, [&c] {
             return std::vector<StreamLoad>{{c.loads->mem, c.s1}};
         });
         cooldown(5);
-        sustainedStep("Tensor + memoria (max)", 30, [&c] {
+        sustainedStep("Tensor + memory (max)", 30, [&c] {
             return std::vector<StreamLoad>{{c.loads->tensor, c.s1}, {c.loads->mem, c.s2}};
         });
         cooldown(5);
@@ -198,7 +198,7 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
         const double idleSec = 3 * k;
         const double burstSec = 0.3;  // not scaled: it is the transient duration
         char label[96];
-        std::snprintf(label, sizeof(label), "Burst da idle (%d x %.3g s idle + %.0f ms)", cycles,
+        std::snprintf(label, sizeof(label), "Burst from idle (%d x %.3g s idle + %.0f ms)", cycles,
                       idleSec, burstSec * 1000);
         add(label, cycles * (idleSec + burstSec),
             [&c, cycles, idleSec, burstSec] {
@@ -212,13 +212,13 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
 }
 
 void printPlan(const std::vector<Step>& plan) {
-    std::printf("Sequenza delle fasi (durate stimate, calibrazione esclusa):\n");
+    std::printf("Phase sequence (estimated durations, calibration excluded):\n");
     double t = 0.0;
     for (const Step& s : plan) {
         std::printf("  %8.1f s  %7.2f s  %s\n", t, s.sec, s.label.c_str());
         t += s.sec;
     }
-    std::printf("Totale stimato: %.1f s (%.1f minuti)\n", t, t / 60.0);
+    std::printf("Estimated total: %.1f s (%.1f minutes)\n", t, t / 60.0);
 }
 
 void onSignal(int) { g_stopRequested = true; }
@@ -241,21 +241,21 @@ void printGpuInfo(int device, const cudaDeviceProp& prop, const Monitor& mon) {
     double enforcedW = activeLimitW(mon.handle(), &enforcedErr);
     nvmlReturn_t defErr = nvmlDeviceGetPowerManagementDefaultLimit(mon.handle(), &def);
     double defW = limitW(defErr, def);
-    // "n/d" plus the NVML reason, so an unreadable limit can be diagnosed from the log.
+    // "n/a" plus the NVML reason, so an unreadable limit can be diagnosed from the log.
     auto fmt = [](double w, nvmlReturn_t err) {
         char b[96];
         if (w >= 0) std::snprintf(b, sizeof(b), "%.0f W", w);
-        else if (err != NVML_SUCCESS) std::snprintf(b, sizeof(b), "n/d (NVML: %s)", nvmlErrorString(err));
-        else std::snprintf(b, sizeof(b), "n/d");
+        else if (err != NVML_SUCCESS) std::snprintf(b, sizeof(b), "n/a (NVML: %s)", nvmlErrorString(err));
+        else std::snprintf(b, sizeof(b), "n/a");
         return std::string(b);
     };
     std::printf("GPU %d: %s\n", device, prop.name);
     std::printf("  SM: %d | compute capability %d.%d | VRAM %.1f GB\n", prop.multiProcessorCount,
                 prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
-    std::printf("  Power limit attivo: %s | di default: %s\n", fmt(enforcedW, enforcedErr).c_str(),
+    std::printf("  Enforced power limit: %s | default: %s\n", fmt(enforcedW, enforcedErr).c_str(),
                 fmt(defW, defErr).c_str());
-    std::printf("  Potenza istantanea NVML: %s\n\n",
-                mon.instantPowerSupported() ? "disponibile" : "non disponibile (colonna = -1)");
+    std::printf("  NVML instantaneous power: %s\n\n",
+                mon.instantPowerSupported() ? "available" : "not available (column = -1)");
 }
 
 }  // namespace
@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
     int deviceCount = 0;
     CK(cudaGetDeviceCount(&deviceCount));
     if (opt.device >= deviceCount) {
-        std::fprintf(stderr, "Errore: --device %d non valido, GPU CUDA disponibili: %d\n",
+        std::fprintf(stderr, "Error: invalid --device %d, available CUDA GPUs: %d\n",
                      opt.device, deviceCount);
         return 2;
     }
@@ -288,8 +288,8 @@ int main(int argc, char** argv) {
     cudaFuncAttributes attr{};
     if (cudaFuncGetAttributes(&attr, fmaBurn) != cudaSuccess) {
         std::fprintf(stderr,
-                     "Errore: il programma non è compilato per questa GPU (compute capability "
-                     "%d.%d).\nRicompila con -DCMAKE_CUDA_ARCHITECTURES=%d%d\n",
+                     "Error: the program is not compiled for this GPU (compute capability "
+                     "%d.%d).\nRebuild with -DCMAKE_CUDA_ARCHITECTURES=%d%d\n",
                      prop.major, prop.minor, prop.major, prop.minor);
         return 1;
     }
@@ -297,7 +297,7 @@ int main(int argc, char** argv) {
     Monitor mon(opt.device);
     printGpuInfo(opt.device, prop, mon);
     if (prop.major < 7)
-        std::printf("Nota: GPU senza tensor core, il carico tensor usa FMA come ripiego.\n\n");
+        std::printf("Note: GPU without tensor cores, the tensor load falls back to FMA.\n\n");
 
 #ifdef _WIN32
     timeBeginPeriod(1);  // 1 ms sleep granularity for the monitor and idle
@@ -319,14 +319,14 @@ int main(int argc, char** argv) {
     CpuLoad cpu;
     if (opt.cpu) {
         cpu.start(opt.cpuThreads);
-        std::printf("Carico CPU: %d thread, istruzioni %s, priorità bassa (la GPU ha la precedenza)\n",
+        std::printf("CPU load: %d threads, %s instructions, low priority (the GPU comes first)\n",
                     cpu.threads(), cpu.isaName());
-        std::printf("  Nota: temperatura e potenza della CPU non sono misurabili da qui;\n"
-                    "  tienile d'occhio con il monitor della scheda madre o con HWiNFO.\n\n");
+        std::printf("  Note: CPU temperature and power cannot be measured from here;\n"
+                    "  keep an eye on them with the motherboard monitor or HWiNFO.\n\n");
     }
 
     printPlan(plan);
-    std::printf("\nAvvio del test. Premi Ctrl+C per interrompere.\n");
+    std::printf("\nStarting the test. Press Ctrl+C to stop.\n");
     mon.start(opt.sampleMs);
     for (const Step& s : plan) {
         if (g_stopRequested) break;
@@ -335,28 +335,28 @@ int main(int argc, char** argv) {
     CK(cudaDeviceSynchronize());
     cpu.stop();
     // A few final idle samples to close the log.
-    if (!g_stopRequested) idle(mon, "_fine", 0.2);
+    if (!g_stopRequested) idle(mon, "_end", 0.2);
     mon.stop();
 
     const bool interrupted = g_stopRequested;
-    if (interrupted) std::printf("\nInterrotto dall'utente: salvo i dati raccolti finora.\n");
+    if (interrupted) std::printf("\nInterrupted by the user: saving the data collected so far.\n");
 
     double enforcedW = activeLimitW(mon.handle());
     const auto samples = mon.samples();
     const auto phases = mon.phaseNames();
     printSummary(samples, phases, enforcedW);
     if (opt.cpu) {
-        std::printf("\nCarico CPU: %d thread (%s), %.1f GFLOPS medi per %.0f s\n", cpu.threads(),
+        std::printf("\nCPU load: %d threads (%s), %.1f GFLOPS average over %.0f s\n", cpu.threads(),
                     cpu.isaName(), cpu.gflops(), cpu.seconds());
         std::fflush(stdout);
     }
 
     int rc = interrupted ? 130 : 0;
     if (writeCsv(opt.out, samples, phases)) {
-        std::printf("\nLog salvato in %s (%zu campioni).\n", opt.out.c_str(), samples.size());
+        std::printf("\nLog saved to %s (%zu samples).\n", opt.out.c_str(), samples.size());
         std::fflush(stdout);
     } else {
-        std::fprintf(stderr, "\nErrore: impossibile scrivere %s\n", opt.out.c_str());
+        std::fprintf(stderr, "\nError: cannot write %s\n", opt.out.c_str());
         rc = 1;
     }
 

@@ -28,8 +28,8 @@ shuts down or reboots (PSU OCP/OPP tripping).
 - Platforms: Linux and Windows. No OS-specific APIs in the main code; where needed
   (e.g. `timeBeginPeriod` on Windows), isolate them behind `#ifdef _WIN32`.
 - Analysis script: Python 3.10+, dependencies limited to `pandas` and `matplotlib`.
-- Code comments and documentation **in English**; program output (messages, help, summary
-  table, phase names) **in Italian**; identifiers in English.
+- Everything **in English**: code comments, documentation, program output (messages, help,
+  summary table, phase names) and identifiers.
 
 ## Repository layout
 
@@ -120,7 +120,7 @@ fixed values (about 8 blocks per SM for FMA and tensor, 4 for memory).
 
 ### Report (`report.cpp`)
 
-- Per-phase table: sample count, average W, max W, max instantaneous W (or "n/d"),
+- Per-phase table: sample count, average W, max W, max instantaneous W (or "n/a"),
   max SM clock, max temperature.
 - Global peak and percentage of the enforced power limit (`nvmlDeviceGetEnforcedPowerLimit`).
 - Always print the warning that NVML cannot see sub-millisecond transients.
@@ -140,12 +140,12 @@ gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
 - `--only`: runs only one group of tests.
 - `--list`: prints the phase sequence with estimated durations and exits.
 - `--cpu` / `--cpu-threads N`: built-in CPU load (`cpu_load.cpp`), one thread per logical
-  processor by default. Starts after calibration, hidden phase `_riscaldamento CPU` of
+  processor by default. Starts after calibration, hidden phase `_CPU warm-up` of
   30 s × `--scale`, then stays active for the whole sequence. Kernel `x = x*x - 1.9` with 8
   independent chains: AVX2+FMA with runtime detection (no global compiler flag), scalar
   otherwise. Low-priority threads (OS APIs behind `#ifdef`). At the end of the test print
   threads, ISA and average GFLOPS. The CSV does not change.
-- Validate arguments and print a clear help message in Italian when they are invalid.
+- Validate arguments and print a clear help message when they are invalid.
 - At startup print GPU name, SM count, compute capability, VRAM, enforced and default power limit.
 - Handle Ctrl+C: stop the loads, close the monitor and **still write** the summary and the CSV
   with the data collected so far.
@@ -155,12 +155,12 @@ gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
 | Phase (name in the output) | Duration |
 |---|---|
 | idle baseline (`Idle baseline`) | 5 s |
-| sustained FP32 FMA (`FMA FP32 sostenuto`) | 20 s |
-| sustained FP16 tensor (`Tensor FP16 sostenuto`) | 20 s |
-| sustained memory (`Memoria VRAM sostenuto`) | 15 s |
-| tensor + memory, max (`Tensor + memoria (max)`) | 30 s |
-| square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz (`Onda quadra N Hz`) | 10 s each |
-| bursts from idle: 10 cycles, 3 s idle + 300 ms load (`Burst da idle`) | ~33 s |
+| sustained FP32 FMA (`Sustained FP32 FMA`) | 20 s |
+| sustained FP16 tensor (`Sustained FP16 tensor`) | 20 s |
+| sustained memory (`Sustained VRAM memory`) | 15 s |
+| tensor + memory, max (`Tensor + memory (max)`) | 30 s |
+| square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz (`Square wave N Hz`) | 10 s each |
+| bursts from idle: 10 cycles, 3 s idle + 300 ms load (`Burst from idle`) | ~33 s |
 
 Between load phases: `_cooldown` of 5 s (3 s after each square wave).
 The burst duration (300 ms) is **not** scaled.

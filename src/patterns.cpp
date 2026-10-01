@@ -40,7 +40,7 @@ void runUntil(const std::vector<StreamLoad>& loads, Clock::time_point end) {
 
 std::string squareWaveName(double hz) {
     char buf[64];
-    std::snprintf(buf, sizeof(buf), "Onda quadra %g Hz", hz);
+    std::snprintf(buf, sizeof(buf), "Square wave %g Hz", hz);
     return buf;
 }
 
@@ -84,8 +84,8 @@ void squareWave(Monitor& mon, double hz, const Launch& shortLoad, cudaStream_t s
 void burstFromIdle(Monitor& mon, int cycles, double idleSec, double burstSec,
                    const std::vector<StreamLoad>& loads) {
     for (int c = 0; c < cycles && !g_stopRequested; ++c) {
-        idle(mon, "_idle burst", idleSec);
+        idle(mon, "_burst idle", idleSec);
         if (g_stopRequested) break;
-        sustained(mon, "Burst da idle", loads, burstSec);
+        sustained(mon, "Burst from idle", loads, burstSec);
     }
 }

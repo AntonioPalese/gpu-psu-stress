@@ -20,7 +20,7 @@ Monitor::Monitor(int cudaDevice) {
 #endif
 
     t0_ = std::chrono::steady_clock::now();
-    phases_.push_back("_avvio");
+    phases_.push_back("_start");
 }
 
 Monitor::~Monitor() {
@@ -57,7 +57,7 @@ void Monitor::setPhase(const std::string& name) {
     phase_ = idx;
     if (!isHidden(name)) {
         double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0_).count();
-        std::printf("[%7.2f s] Fase: %s\n", t, name.c_str());
+        std::printf("[%7.2f s] Phase: %s\n", t, name.c_str());
         std::fflush(stdout);
     }
 }

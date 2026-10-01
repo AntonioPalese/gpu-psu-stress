@@ -36,5 +36,5 @@ void squareWave(Monitor& mon, double hz, const Launch& shortLoad, cudaStream_t s
 void burstFromIdle(Monitor& mon, int cycles, double idleSec, double burstSec,
                    const std::vector<StreamLoad>& loads);
 
-// Phase name of a square wave, e.g. "Onda quadra 5 Hz".
+// Phase name of a square wave, e.g. "Square wave 5 Hz".
 std::string squareWaveName(double hz);

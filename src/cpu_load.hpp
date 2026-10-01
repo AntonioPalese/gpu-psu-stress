@@ -23,8 +23,8 @@ public:
     void stop();
 
     int threads() const { return static_cast<int>(threads_.size()); }
-    // "AVX2+FMA" if the CPU supports it, otherwise "scalari" (scalar).
-    const char* isaName() const { return avx2_ ? "AVX2+FMA" : "scalari"; }
+    // "AVX2+FMA" if the CPU supports it, otherwise "scalar".
+    const char* isaName() const { return avx2_ ? "AVX2+FMA" : "scalar"; }
     // Average GFLOPS between start() and stop() (or until now if still running).
     double gflops() const;
     double seconds() const;
