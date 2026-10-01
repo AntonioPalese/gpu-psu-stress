@@ -203,6 +203,16 @@ Cose da notare:
 
 ### Il grafico
 
+Il modo più semplice è con [uv](https://docs.astral.sh/uv/): il file `pyproject.toml` nella
+cartella del progetto elenca le dipendenze, e uv crea da solo l'ambiente in `.venv`.
+
+```bash
+uv sync                                       # solo la prima volta
+uv run scripts/plot_log.py power_log.csv --out grafico.png --limit 250
+```
+
+In alternativa, con pip:
+
 ```bash
 pip install pandas matplotlib
 python scripts/plot_log.py power_log.csv --out grafico.png --limit 250

@@ -1,0 +1,15 @@
+# Ambiente Python per gli script di analisi (scripts/plot_log.py).
+# Con uv:  uv sync    poi    uv run scripts/plot_log.py power_log.csv --out grafico.png
+[project]
+name = "gpu-psu-stress-scripts"
+version = "0.1.0"
+description = "Script di analisi dei log CSV di gpu-psu-stress"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+]
+
+[tool.uv]
+# Non è un pacchetto installabile: uv crea solo l'ambiente con le dipendenze.
+package = false
