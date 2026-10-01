@@ -91,6 +91,21 @@ cmake --build build -j
 ./build/gpu-psu-stress
 ```
 
+#### Linux senza CUDA installato (container)
+
+Se non vuoi installare il toolkit CUDA, lo script `scripts/build_linux.sh` compila dentro un
+container ufficiale NVIDIA con CUDA 12.8. Serve solo **podman** o **docker**, e funziona anche
+da Windows (Git Bash, con Podman Desktop o Docker Desktop):
+
+```bash
+scripts/build_linux.sh            # RTX 50xx
+scripts/build_linux.sh "89;120"   # più architetture in un solo binario
+./build-linux/gpu-psu-stress      # sul PC Linux con la GPU
+```
+
+Il primo avvio scarica l'immagine CUDA (alcuni GB). Il binario prodotto richiede sul PC
+Linux soltanto il driver NVIDIA.
+
 ### Windows (Prompt dei comandi o PowerShell)
 
 ```bat
@@ -124,7 +139,8 @@ cmake --build build --config Release
 - CUDA 13.x richiede un driver ≥ 580: un eseguibile compilato con CUDA 13 non parte sui PC
   con driver più vecchi.
 - Sul PC di destinazione **non serve installare CUDA**: basta il driver NVIDIA (il runtime
-  CUDA è incluso nell'eseguibile, NVML arriva con il driver).
+  CUDA è incluso nell'eseguibile, NVML arriva con il driver). Su Windows anche il runtime
+  C++ è incluso, quindi non serve il Visual C++ Redistributable.
 
 ## Uso
 
@@ -206,10 +222,24 @@ Cose da notare:
 Il modo più semplice è con [uv](https://docs.astral.sh/uv/): il file `pyproject.toml` nella
 cartella del progetto elenca le dipendenze, e uv crea da solo l'ambiente in `.venv`.
 
+Installazione di uv (una volta sola):
+
+```bash
+# Windows (PowerShell)
+winget install astral-sh.uv
+# Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Poi, dalla cartella del progetto (i comandi sono uguali su Windows e Linux):
+
 ```bash
 uv sync                                       # solo la prima volta
 uv run scripts/plot_log.py power_log.csv --out grafico.png --limit 250
 ```
+
+Su un server Linux senza interfaccia grafica usa sempre `--out`: senza, lo script prova ad
+aprire una finestra.
 
 In alternativa, con pip:
 
