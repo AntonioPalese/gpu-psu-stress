@@ -38,6 +38,41 @@ Per questo test non servono: il verdetto pratico è se il PC arriva in fondo sen
 - **ElmorLabs PMD2**: un piccolo dispositivo USB che misura la potenza su PCIe e 12V-2x6 con
   campionamento rapido.
 
+## Esecuzione automatica: `scripts\run_all_tests.bat`
+
+Lo script esegue in serie tutti i test delle fasi 1-3 qui sotto. Copia nella stessa cartella
+`gpu-psu-stress.exe` e `run_all_tests.bat`, poi fai doppio clic sul `.bat` (oppure lancialo
+da un prompt dei comandi).
+
+| # | Test | Parametri | Durata |
+|---|---|---|---|
+| 01 | `prova_breve_gpu_sola` | `--scale 0.05` | ~20 s |
+| 02 | `completo_gpu_sola_scala1` | `--scale 1` | ~4 min |
+| 03 | `completo_gpu_sola_scala2` | `--scale 2` | ~8 min |
+| — | *pausa: lo script chiede di avviare lo stress della CPU* | | |
+| 04-05 | `completo_gpu_cpu_scala2_run1..2` | `--scale 2` | ~8 min ciascuno |
+| 06-08 | `onde_quadre_gpu_cpu_scala2_run1..3` | `--only square --scale 2` | ~4 min ciascuno |
+| 09-11 | `burst_gpu_cpu_scala2_run1..3` | `--only burst --scale 2` | ~1 min ciascuno |
+
+Tra un test e l'altro c'è una pausa di 30 s. In totale circa 45 minuti. Alla domanda sulla
+CPU puoi rispondere **N** per saltare la parte con la CPU sotto stress.
+
+Tutto finisce in `gpu-psu-out\sessione_AAAAMMGG_HHMMSS\`, accanto al `.bat`:
+
+- `NN_<test>.csv`: i campioni, da cui si fanno i grafici con `plot_log.py`;
+- `NN_<test>.log`: l'output completo del programma (calibrazione, fasi, riepilogo), con il
+  comando in testa e il codice di uscita in fondo;
+- `sessione.log`: GPU, driver e power limit (da `nvidia-smi`), orario ed esito di ogni test.
+
+Ctrl+C interrompe il test in corso, e il CSV viene salvato comunque. Alla domanda
+*"Terminare il processo batch (S/N)?"* rispondi **N** per passare al test successivo, **S**
+per fermare tutto. Dopo un Ctrl+C la fine del `.log` di quel test può mancare: il CSV è
+comunque completo fino al momento dell'interruzione.
+
+Per controllare che lo script funzioni prima della sessione vera:
+`run_all_tests.bat rapido` esegue tutti gli 11 test con durate minime (~2-3 minuti), senza
+domande né pause, e scrive in `gpu-psu-out\rapido_...`.
+
 ## 0. Preparazione (una volta sola)
 
 - Copia sul PC con la 5070 `gpu-psu-stress.exe`. Se vuoi i grafici direttamente lì, copia
