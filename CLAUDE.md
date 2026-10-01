@@ -64,8 +64,12 @@ un risultato in memoria globale, così il compilatore non elimina il lavoro.
 - **`tensorBurn`**: tensor core tramite WMMA (`nvcuda::wmma`), frammenti 16×16×16,
   input `__half`, accumulo `float`, 4 accumulatori indipendenti per ILP.
   Matrici caricate da shared memory una sola volta, poi `mma_sync` in loop. 4 warp per blocco.
-- **`memBurn`**: streaming read+write su `float4` con grid-stride loop su 2 buffer da 512 MB,
-  alternando sorgente e destinazione a ogni lancio.
+- **`memBurn`**: streaming read+write su `float4` con grid-stride loop su 2 buffer,
+  alternando sorgente e destinazione a ogni lancio. I buffer occupano **tutta la VRAM libera**
+  (`cudaMemGetInfo`) meno un margine di max(512 MB, 5% di `totalGlobalMem`), divisa in due;
+  se l'allocazione fallisce si riprova con il 5% in meno. Ogni lancio riparte dall'indice in
+  cui si è fermato il precedente (parametro `start`), così lanci successivi percorrono tutta la
+  memoria allocata e non solo i primi GB.
 
 Dimensionamento griglia: derivare sempre dal numero di SM (`multiProcessorCount`), mai
 valori fissi (circa 8 blocchi per SM per FMA e tensor, 4 per la memoria).

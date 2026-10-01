@@ -11,7 +11,10 @@
 
 namespace {
 
-constexpr size_t kMemBufferBytes = size_t(512) << 20;  // 512 MB per buffer
+// VRAM lasciata libera per il desktop e gli altri programmi: il massimo tra 512 MB e il 5%
+// della VRAM totale. Su Windows lo schermo è di solito collegato alla stessa GPU.
+constexpr size_t kMemReserveMin = size_t(512) << 20;
+constexpr double kMemReserveFraction = 0.05;
 
 double measureMs(const ParamLaunch& pl, cudaStream_t stream, int iters, cudaEvent_t a,
                  cudaEvent_t b) {
@@ -77,21 +80,39 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
     CK(cudaMalloc(&fmaOut_, sizeof(float) * fmaBlocks * kFmaThreads));
     CK(cudaMalloc(&tensorOut_, sizeof(float) * tensorBlocks * kTensorWarps * 256));
 
-    // 2 buffer da 512 MB; su GPU con poca VRAM si riduce a 1/4 della memoria libera ciascuno.
-    size_t freeB = 0, totalB = 0;
-    CK(cudaMemGetInfo(&freeB, &totalB));
-    size_t bytes = std::min(kMemBufferBytes, freeB / 4);
-    bytes -= bytes % (kMemChunkElems * sizeof(float4));
-    if (bytes < kMemChunkElems * sizeof(float4)) {
+    // Buffer di memoria: tutta la VRAM libera meno un margine, divisa in 2 buffer che si
+    // alternano come sorgente e destinazione. La VRAM totale viene dalle proprietà della GPU,
+    // quella libera da cudaMemGetInfo (esclude ciò che usano già il desktop e gli altri programmi).
+    const size_t totalB = prop.totalGlobalMem;
+    size_t freeB = 0, totalInfo = 0;
+    CK(cudaMemGetInfo(&freeB, &totalInfo));
+    const size_t reserve =
+        std::max(kMemReserveMin, static_cast<size_t>(double(totalB) * kMemReserveFraction));
+    const size_t align = kMemChunkElems * sizeof(float4);
+    size_t bytes = freeB > reserve ? (freeB - reserve) / 2 : 0;
+    bytes -= bytes % align;
+    // cudaMemGetInfo è una stima: se l'allocazione fallisce si riprova con il 5% in meno.
+    while (bytes >= align) {
+        const cudaError_t e0 = cudaMalloc(&memBuf_[0], bytes);
+        const cudaError_t e1 = (e0 == cudaSuccess) ? cudaMalloc(&memBuf_[1], bytes) : e0;
+        if (e1 == cudaSuccess) break;
+        if (e0 == cudaSuccess) cudaFree(memBuf_[0]);
+        memBuf_[0] = memBuf_[1] = nullptr;
+        (void)cudaGetLastError();  // azzera l'errore di allocazione (non permanente)
+        bytes = bytes / 20 * 19;
+        bytes -= bytes % align;
+    }
+    if (bytes < align) {
         std::fprintf(stderr, "Memoria GPU libera insufficiente per il test di memoria.\n");
         std::exit(EXIT_FAILURE);
     }
-    if (bytes < kMemBufferBytes)
-        std::printf("  Nota: VRAM libera limitata, buffer di memoria da %zu MB invece di 512 MB\n",
-                    bytes >> 20);
+    const double gb = 1024.0 * 1024.0 * 1024.0;
+    std::printf("  Memoria: 2 buffer da %.2f GB = %.2f GB su %.2f GB di VRAM (%.0f%%), "
+                "%.2f GB lasciati liberi\n",
+                bytes / gb, 2.0 * bytes / gb, totalB / gb, 100.0 * 2.0 * bytes / double(totalB),
+                (freeB - 2 * bytes) / gb);
     memElems_ = bytes / sizeof(float4);
     for (int i = 0; i < 2; ++i) {
-        CK(cudaMalloc(&memBuf_[i], bytes));
         fillBuffer<<<memBlocks, kMemThreads, 0, stream>>>(memBuf_[i], memElems_, 1234u + i);
         CK(cudaGetLastError());
     }
@@ -109,7 +130,11 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
         const float4* src = memBuf_[memFlip_];
         float4* dst = memBuf_[memFlip_ ^ 1];
         memFlip_ ^= 1;
-        memBurn<<<memBlocks, kMemThreads, 0, s>>>(src, dst, memElems_, iters);
+        // Ogni lancio riparte da dove si è fermato il precedente: in pochi lanci viene
+        // percorsa tutta la VRAM allocata, non solo i primi GB.
+        const size_t start = memOffset_;
+        memOffset_ = (memOffset_ + size_t(iters) * kMemChunkElems) % memElems_;
+        memBurn<<<memBlocks, kMemThreads, 0, s>>>(src, dst, memElems_, start, iters);
         CK(cudaGetLastError());
     };
 

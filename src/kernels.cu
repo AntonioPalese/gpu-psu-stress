@@ -71,14 +71,20 @@ __global__ void __launch_bounds__(kTensorThreads) tensorBurn(float* out, int ite
 }
 
 __global__ void __launch_bounds__(kMemThreads)
-    memBurn(const float4* __restrict__ src, float4* __restrict__ dst, size_t n, int iters) {
+    memBurn(const float4* __restrict__ src, float4* __restrict__ dst, size_t n, size_t start,
+            int iters) {
     const size_t tid = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     const size_t stride = size_t(gridDim.x) * blockDim.x;
-    const size_t total = size_t(iters) * kMemChunkElems;
+    size_t remaining = size_t(iters) * kMemChunkElems;
+    size_t pos = start % n;
 
-    for (size_t base = 0; base < total; base += n) {
-        const size_t lim = (total - base < n) ? total - base : n;
-        for (size_t i = tid; i < lim; i += stride) {
+    // Segmenti contigui [pos, pos + seg): dal punto di partenza fino alla fine del buffer,
+    // poi di nuovo da 0. Le condizioni del ciclo sono uguali per tutti i thread.
+    while (remaining > 0) {
+        const size_t seg = (remaining < n - pos) ? remaining : n - pos;
+        const size_t lim = pos + seg;
+        remaining -= seg;
+        for (size_t i = pos + tid; i < lim; i += stride) {
             float4 v = src[i];
             // Trasformazione contrattiva: i valori restano limitati lancio dopo lancio.
             v.x = fmaf(v.x, -0.999f, 0.001f);
@@ -87,6 +93,7 @@ __global__ void __launch_bounds__(kMemThreads)
             v.w = fmaf(v.w, -0.999f, 0.004f);
             dst[i] = v;
         }
+        pos = 0;
     }
 }
 

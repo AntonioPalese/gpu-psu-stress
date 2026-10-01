@@ -19,10 +19,11 @@ __global__ void fmaBurn(float* out, int iters);
 // out: 256 float per warp (gridDim.x * kTensorWarps * 256).
 __global__ void tensorBurn(float* out, int iters);
 
-// Streaming read+write su float4: iters * kMemChunkElems elementi, ripartendo da capo su src
-// quando si supera n.
+// Streaming read+write su float4: iters * kMemChunkElems elementi a partire dall'indice
+// 'start', ripartendo da 0 quando si supera n. Chi lancia fa avanzare 'start' a ogni lancio,
+// così lanci successivi percorrono tutto il buffer anche se è molto più grande di un lancio.
 __global__ void memBurn(const float4* __restrict__ src, float4* __restrict__ dst, size_t n,
-                        int iters);
+                        size_t start, int iters);
 
 // Riempie un buffer con valori pseudo-casuali in [-1, 1].
 __global__ void fillBuffer(float4* buf, size_t n, unsigned int seed);

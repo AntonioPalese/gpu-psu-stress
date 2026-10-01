@@ -36,5 +36,6 @@ private:
     float* tensorOut_ = nullptr;
     float4* memBuf_[2] = {nullptr, nullptr};
     size_t memElems_ = 0;
-    int memFlip_ = 0;  // alterna sorgente e destinazione a ogni lancio
+    int memFlip_ = 0;        // alterna sorgente e destinazione a ogni lancio
+    size_t memOffset_ = 0;   // punto di partenza del prossimo lancio di memBurn
 };

@@ -214,8 +214,18 @@ su GPU diverse.
 ### All'avvio
 
 Il programma stampa nome della GPU, numero di SM, compute capability, VRAM, power limit
-attivo e di default, e se la GPU fornisce la potenza istantanea. Poi mostra il risultato
-della calibrazione di ogni carico.
+attivo e di default, e se la GPU fornisce la potenza istantanea. Poi mostra quanta VRAM usa
+il test di memoria e il risultato della calibrazione di ogni carico.
+
+Il test di memoria occupa **tutta la VRAM libera**, lasciando un margine per il desktop e gli
+altri programmi (512 MB o il 5% della VRAM, il valore più grande), ad esempio:
+
+```
+  Memoria: 2 buffer da 5.20 GB = 10.40 GB su 11.94 GB di VRAM (87%), 0.62 GB lasciati liberi
+```
+
+(valori indicativi: dipendono da quanta VRAM usano già lo schermo e gli altri programmi).
+Durante il test la memoria viene percorsa tutta, un pezzo per lancio.
 
 ### La tabella finale
 
