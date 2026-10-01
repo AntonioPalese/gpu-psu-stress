@@ -17,6 +17,7 @@
 #endif
 
 #include "check.hpp"
+#include "cpu_load.hpp"
 #include "kernels.cuh"
 #include "loads.hpp"
 #include "monitor.hpp"
@@ -32,6 +33,8 @@ struct Options {
     std::string out = "power_log.csv";
     std::string only;  // "", "sustained", "square", "burst"
     bool list = false;
+    bool cpu = false;     // carico CPU in parallelo
+    int cpuThreads = 0;   // 0 = uno per processore logico
 };
 
 void printHelp(const char* prog) {
@@ -49,6 +52,9 @@ void printHelp(const char* prog) {
         "  --out FILE       file CSV di uscita (default power_log.csv)\n"
         "  --only GRUPPO    esegue solo un gruppo: sustained, square o burst\n"
         "                   (la fase di idle iniziale viene eseguita sempre)\n"
+        "  --cpu            carica anche la CPU al massimo per tutto il test, in parallelo\n"
+        "                   alla GPU (un thread per processore logico)\n"
+        "  --cpu-threads N  come --cpu, ma con N thread (1-1024)\n"
         "  --list           stampa la sequenza delle fasi con le durate stimate ed esce\n"
         "  -h, --help       mostra questo aiuto\n"
         "\n"
@@ -107,6 +113,13 @@ Options parseArgs(int argc, char** argv) {
             o.only = value();
             if (o.only != "sustained" && o.only != "square" && o.only != "burst")
                 usageError(prog, "--only accetta sustained, square o burst, ricevuto '" + o.only + "'");
+        } else if (a == "--cpu") {
+            o.cpu = true;
+        } else if (a == "--cpu-threads") {
+            const char* v = value();
+            if (!parseInt(v, o.cpuThreads) || o.cpuThreads < 1 || o.cpuThreads > 1024)
+                usageError(prog, std::string("--cpu-threads deve essere un intero tra 1 e 1024, ricevuto '") + v + "'");
+            o.cpu = true;
         } else if (a == "--list") {
             o.list = true;
         } else {
@@ -146,6 +159,11 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
         add(name, sec, [&c, name, sec, loads] { sustained(*c.mon, name, loads(), sec); });
     };
 
+    if (o.cpu) {
+        // Il consumo della CPU impiega qualche secondo a stabilizzarsi (temperatura, boost).
+        const double sec = 30 * k;
+        add("_riscaldamento CPU", sec, [&c, sec] { idle(*c.mon, "_riscaldamento CPU", sec); });
+    }
     add("Idle baseline", 5 * k, [&c, k] { idle(*c.mon, "Idle baseline", 5 * k); });
     if (o.only.empty() || o.only == "sustained") {
         sustainedStep("FMA FP32 sostenuto", 20, [&c] {
@@ -283,6 +301,16 @@ int main(int argc, char** argv) {
     loads.init(prop, s1);
     ctx = Context{&mon, &loads, s1, s2};
 
+    // Il carico CPU parte dopo la calibrazione, per non disturbarla.
+    CpuLoad cpu;
+    if (opt.cpu) {
+        cpu.start(opt.cpuThreads);
+        std::printf("Carico CPU: %d thread, istruzioni %s, priorità bassa (la GPU ha la precedenza)\n",
+                    cpu.threads(), cpu.isaName());
+        std::printf("  Nota: temperatura e potenza della CPU non sono misurabili da qui;\n"
+                    "  tienile d'occhio con il monitor della scheda madre o con HWiNFO.\n\n");
+    }
+
     printPlan(plan);
     std::printf("\nAvvio del test. Premi Ctrl+C per interrompere.\n");
     mon.start(opt.sampleMs);
@@ -291,6 +319,7 @@ int main(int argc, char** argv) {
         s.run();
     }
     CK(cudaDeviceSynchronize());
+    cpu.stop();
     // Qualche campione finale a riposo per chiudere il log.
     if (!g_stopRequested) idle(mon, "_fine", 0.2);
     mon.stop();
@@ -303,6 +332,11 @@ int main(int argc, char** argv) {
     const auto samples = mon.samples();
     const auto phases = mon.phaseNames();
     printSummary(samples, phases, enforcedW);
+    if (opt.cpu) {
+        std::printf("\nCarico CPU: %d thread (%s), %.1f GFLOPS medi per %.0f s\n", cpu.threads(),
+                    cpu.isaName(), cpu.gflops(), cpu.seconds());
+        std::fflush(stdout);
+    }
 
     int rc = interrupted ? 130 : 0;
     if (writeCsv(opt.out, samples, phases)) {

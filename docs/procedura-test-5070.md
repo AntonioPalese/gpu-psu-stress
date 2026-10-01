@@ -10,9 +10,8 @@ Per compilare l'eseguibile su un altro PC vedi [piano-build-sm120.md](piano-buil
 
 Il minimo:
 
-- `gpu-psu-stress.exe`;
-- **uno** tra OCCT e Prime95, per caricare la CPU;
-- **HWiNFO**, facoltativo ma consigliato;
+- `gpu-psu-stress.exe`, che con `--cpu` carica anche la CPU: OCCT e Prime95 non servono più;
+- **HWiNFO**, facoltativo ma consigliato: è l'unico modo per vedere la temperatura della CPU;
 - il **Visualizzatore eventi**, già incluso in Windows.
 
 Scarica sempre dai siti ufficiali: le copie su siti di download di terze parti spesso
@@ -21,7 +20,7 @@ contengono adware.
 | Programma | Cos'è | A cosa serve qui |
 |---|---|---|
 | **HWiNFO** (HWiNFO64) | Monitor gratuito per Windows che legge tutti i sensori di scheda madre, CPU e GPU. All'avvio scegli "Sensors-only". | Mostra quello che NVML non vede: consumo della CPU, temperatura dell'hotspot e della memoria della GPU e, su molte RTX 50, la tensione sul connettore a 16 pin. Può salvare un log CSV da confrontare con quello del tool. |
-| **OCCT** | Programma di stress test e stabilità per Windows, gratuito per uso personale, con interfaccia grafica. | Mette la CPU al massimo mentre gira il tool. Ha anche un test "Power" che carica CPU e GPU insieme, utile come controprova. |
+| **OCCT** | Programma di stress test e stabilità per Windows, gratuito per uso personale, con interfaccia grafica. | Facoltativo, al posto di `--cpu`: mette la CPU al massimo mentre gira il tool. Ha anche un test "Power" che carica CPU e GPU insieme, utile come controprova. |
 | **Prime95** | Programma del progetto GIMPS (ricerca di numeri primi di Mersenne), usato da anni come stress test della CPU. Al primo avvio scegli "Just Stress Testing". | La modalità **Small FFTs** porta la CPU al consumo e al calore massimi. Alternativa a OCCT: ne basta uno dei due. |
 | **stress-ng** | Programma da riga di comando per **Linux**. | Equivalente di Prime95/OCCT se il test si fa su Linux: `stress-ng --cpu 0` carica tutti i core. |
 | **Visualizzatore eventi** | Incluso in Windows (`eventvwr.msc`). | Dopo un eventuale spegnimento dice se è stato l'alimentatore (Kernel-Power 41) o il driver video (Display 4101). |
@@ -49,13 +48,13 @@ da un prompt dei comandi).
 | 01 | `prova_breve_gpu_sola` | `--scale 0.05` | ~20 s |
 | 02 | `completo_gpu_sola_scala1` | `--scale 1` | ~4 min |
 | 03 | `completo_gpu_sola_scala2` | `--scale 2` | ~8 min |
-| — | *pausa: lo script chiede di avviare lo stress della CPU* | | |
-| 04-05 | `completo_gpu_cpu_scala2_run1..2` | `--scale 2` | ~8 min ciascuno |
-| 06-08 | `onde_quadre_gpu_cpu_scala2_run1..3` | `--only square --scale 2` | ~4 min ciascuno |
-| 09-11 | `burst_gpu_cpu_scala2_run1..3` | `--only burst --scale 2` | ~1 min ciascuno |
+| 04-05 | `completo_gpu_cpu_scala2_run1..2` | `--cpu --scale 2` | ~9 min ciascuno |
+| 06-08 | `onde_quadre_gpu_cpu_scala2_run1..3` | `--cpu --only square --scale 2` | ~5 min ciascuno |
+| 09-11 | `burst_gpu_cpu_scala2_run1..3` | `--cpu --only burst --scale 2` | ~2 min ciascuno |
 
-Tra un test e l'altro c'è una pausa di 30 s. In totale circa 45 minuti. Alla domanda sulla
-CPU puoi rispondere **N** per saltare la parte con la CPU sotto stress.
+Nei test 04-11 il programma carica anche tutti i core della CPU (`--cpu`), con 60 s di
+riscaldamento all'inizio di ogni test. Tra un test e l'altro c'è una pausa di 30 s. In totale
+circa 55 minuti, senza domande: puoi lasciarlo andare da solo.
 
 Tutto finisce in `gpu-psu-out\sessione_AAAAMMGG_HHMMSS\`, accanto al `.bat`:
 
@@ -117,17 +116,18 @@ Cosa aspettarsi:
 
 ## 3. Caso peggiore: GPU e CPU insieme
 
-1. Avvia **OCCT** (test CPU) oppure **Prime95 Small FFTs** e aspetta 1-2 minuti, finché il
-   consumo della CPU si stabilizza.
-2. Con la CPU ancora sotto carico:
+1. Aggiungi `--cpu`: il programma carica tutti i core della CPU per tutto il test, dopo un
+   riscaldamento di 30 s × `--scale`. Non serve nessun altro programma.
    ```powershell
-   .\gpu-psu-stress.exe --out gpu_cpu.csv
+   .\gpu-psu-stress.exe --cpu --scale 2 --out gpu_cpu.csv
    ```
-3. Ripeti più volte i test che provocano i transienti, perché un intervento della protezione
+   A fine test controlla la riga `Carico CPU: ... GFLOPS medi`: conferma che il carico ha
+   girato. In alternativa a `--cpu` puoi ancora usare OCCT o Prime95 Small FFTs.
+2. Ripeti più volte i test che provocano i transienti, perché un intervento della protezione
    del PSU è un evento casuale e una sola esecuzione dice poco:
    ```powershell
-   .\gpu-psu-stress.exe --only square --scale 2 --out square_cpu.csv
-   .\gpu-psu-stress.exe --only burst  --scale 2 --out burst_cpu.csv
+   .\gpu-psu-stress.exe --cpu --only square --scale 2 --out square_cpu.csv
+   .\gpu-psu-stress.exe --cpu --only burst  --scale 2 --out burst_cpu.csv
    ```
    Fai almeno 3 giri di ciascuno. Con `--scale 2` le onde quadre durano 20 s per frequenza;
    i burst restano di 300 ms, ma gli idle tra un burst e l'altro raddoppiano.

@@ -86,6 +86,7 @@ find_package(Threads REQUIRED)
 
 add_executable(gpu-psu-stress
     src/main.cu
+    src/cpu_load.cpp
     src/kernels.cu
     src/loads.cu
     src/monitor.cpp

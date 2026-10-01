@@ -2,13 +2,16 @@
 # Smoke test: esecuzione breve (--scale 0.05) che deve finire in meno di 30 s e produrre
 # un CSV con l'intestazione corretta e almeno una riga per ogni fase non nascosta.
 #
-# Uso: tests/smoke_test.sh [percorso/del/binario]
+# Uso: tests/smoke_test.sh [percorso/del/binario] [argomenti extra...]
 # Senza argomenti cerca il binario in build/ (Linux) o build/Release/ (Windows).
+# Esempio con il carico CPU: tests/smoke_test.sh "" --cpu
 
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="${1:-}"
+[ $# -gt 0 ] && shift
+EXTRA=("$@")
 if [ -z "$BIN" ]; then
     for c in "$ROOT/build/gpu-psu-stress" "$ROOT/build/Release/gpu-psu-stress.exe" \
              "$ROOT/build/gpu-psu-stress.exe"; do
@@ -27,12 +30,12 @@ LIMIT_S=30
 
 fail() { echo "FALLITO: $*"; exit 1; }
 
-echo "Binario: $BIN"
+echo "Binario: $BIN ${EXTRA[*]}"
 start=$(date +%s)
 if command -v timeout >/dev/null 2>&1; then
-    timeout "$((LIMIT_S + 10))" "$BIN" --scale 0.05 --out "$CSV" > "$TMPDIR_SMOKE/out.txt" 2>&1
+    timeout "$((LIMIT_S + 10))" "$BIN" --scale 0.05 "${EXTRA[@]}" --out "$CSV" > "$TMPDIR_SMOKE/out.txt" 2>&1
 else
-    "$BIN" --scale 0.05 --out "$CSV" > "$TMPDIR_SMOKE/out.txt" 2>&1
+    "$BIN" --scale 0.05 "${EXTRA[@]}" --out "$CSV" > "$TMPDIR_SMOKE/out.txt" 2>&1
 fi
 rc=$?
 elapsed=$(( $(date +%s) - start ))

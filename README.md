@@ -53,9 +53,11 @@ oscilloscopio con pinza amperometrica, NVIDIA PCAT, Elmorlabs PMD2 o simili.
 ## Consigli per un test serio
 
 - **Stressa anche la CPU in parallelo.** L'alimentatore alimenta tutto il sistema, e lo
-  scenario peggiore è CPU e GPU al massimo insieme. Avvia prima uno di questi:
-  - Windows: **Prime95** (Small FFTs) oppure **OCCT**;
-  - Linux: `stress-ng --cpu 0` (oppure Prime95 / mprime).
+  scenario peggiore è CPU e GPU al massimo insieme. Basta aggiungere **`--cpu`**: il programma
+  carica tutti i core della CPU per tutta la durata del test, senza software esterni.
+  In alternativa puoi usare Prime95 (Small FFTs), OCCT o, su Linux, `stress-ng --cpu 0`.
+  Il programma non può leggere temperatura e potenza della CPU: tienile d'occhio con il
+  monitor della scheda madre o con HWiNFO.
 - **Controlla il connettore 12V-2x6** (o 12VHPWR) della scheda: deve essere inserito
   **fino in fondo**, senza spazi visibili, e il cavo non deve avere pieghe strette vicino
   al connettore.
@@ -146,7 +148,7 @@ cmake --build build --config Release
 
 ```
 gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
-               [--only sustained|square|burst] [--list]
+               [--only sustained|square|burst] [--cpu | --cpu-threads N] [--list]
 ```
 
 | Opzione | Significato |
@@ -156,6 +158,8 @@ gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
 | `--device N` | quale GPU usare, se ne hai più di una (default 0) |
 | `--out FILE` | nome del file CSV (default `power_log.csv`) |
 | `--only GRUPPO` | esegue solo `sustained`, `square` o `burst` (più l'idle iniziale) |
+| `--cpu` | carica anche la CPU al massimo, in parallelo alla GPU, con un thread per processore logico (vedi sotto) |
+| `--cpu-threads N` | come `--cpu`, ma con N thread (1-1024) |
 | `--list` | mostra la sequenza delle fasi con le durate ed esce, senza toccare la GPU |
 
 Esempi:
@@ -166,7 +170,24 @@ gpu-psu-stress --list                   # cosa verrà eseguito e quanto dura
 gpu-psu-stress --only square            # solo le onde quadre
 gpu-psu-stress --scale 2 --out lungo.csv   # test lungo il doppio
 gpu-psu-stress --scale 0.05             # prova veloce (~20 s) per vedere se tutto funziona
+gpu-psu-stress --cpu --scale 2          # caso peggiore: GPU e CPU al massimo insieme
 ```
+
+### Il carico CPU (`--cpu`)
+
+- Parte **dopo la calibrazione** della GPU, poi c'è una fase di riscaldamento di 30 s
+  (moltiplicati per `--scale`) perché il consumo della CPU si stabilizzi. Da lì resta al
+  massimo per **tutto il test**, idle compresi: la CPU è sempre carica mentre la GPU fa i
+  transienti, come con OCCT o Prime95 in sottofondo.
+- Ogni thread esegue calcoli in virgola mobile senza sosta, con istruzioni **AVX2+FMA** se la
+  CPU le supporta (quasi tutte le CPU dal 2013 in poi), altrimenti con istruzioni normali.
+- I thread hanno **priorità bassa**: la CPU resta al 100%, ma il thread che pilota la GPU e
+  il monitor NVML vengono serviti per primi, così i tempi delle onde quadre restano precisi.
+- A fine test viene stampata una riga come
+  `Carico CPU: 20 thread (AVX2+FMA), 614.0 GFLOPS medi per 58 s`, che conferma che il carico
+  ha girato. Se il valore cala molto da un test all'altro, la CPU si sta surriscaldando.
+- Temperatura e potenza della CPU **non** sono misurate (servirebbero privilegi di
+  amministratore) e non finiscono nel CSV.
 
 **Ctrl+C** interrompe il test in qualsiasi momento: i carichi si fermano e il riepilogo e il
 CSV vengono scritti comunque con i dati raccolti fino a quel punto (codice di uscita 130).

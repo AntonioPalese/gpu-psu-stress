@@ -2,7 +2,7 @@
 rem ===========================================================================
 rem  run_all_tests.bat - esegue in serie tutti i test di gpu-psu-stress
 rem
-rem  Uso:  run_all_tests.bat           sessione completa (circa 45 minuti)
+rem  Uso:  run_all_tests.bat           sessione completa (circa 55 minuti)
 rem        run_all_tests.bat rapido    prova della sessione con durate minime (~3 min)
 rem
 rem  L'eseguibile viene cercato accanto a questo file, poi in ..\build\Release.
@@ -68,7 +68,7 @@ echo  Output in: %OUT%
 if defined RAPIDO echo  MODALITA' RAPIDA: durate ridotte, solo per provare lo script.
 echo.
 echo  Parte A - solo GPU:       prova breve, completo x1, completo x2   (~13 min)
-echo  Parte B - GPU + CPU:      2 completi x2, 3 onde quadre, 3 burst   (~31 min)
+echo  Parte B - GPU + CPU:      2 completi x2, 3 onde quadre, 3 burst   (~40 min)
 echo.
 echo  Tieni d'occhio le temperature. Ctrl+C interrompe il test in corso.
 echo ============================================================================
@@ -83,30 +83,21 @@ call :run_test 02_completo_gpu_sola_scala1 "--scale %SCALA_1%"
 call :run_test 03_completo_gpu_sola_scala2 "--scale %SCALA_2%"
 
 rem --- Parte B: GPU + CPU -------------------------------------------------------
+rem Il carico CPU e' interno al programma (--cpu): parte dopo la calibrazione, si scalda
+rem per 30 s x scala e resta al massimo per tutto il test. Nessun software esterno.
 echo.
 echo ============================================================================
-echo  Parte B - GPU + CPU
-echo  Avvia ORA lo stress della CPU (OCCT, test CPU, oppure Prime95 Small FFTs)
-echo  e aspetta 1-2 minuti che il consumo della CPU si stabilizzi.
+echo  Parte B - GPU + CPU: il programma carica anche tutti i core della CPU (--cpu)
 echo ============================================================================
-if defined RAPIDO goto parte_b
-choice /c SN /m "Lo stress della CPU e' attivo? S = continua, N = salta la parte B"
-if errorlevel 2 (
-    >> "%SLOG%" echo === Parte B saltata dall'utente ===
-    goto fine
-)
-:parte_b
->> "%SLOG%" echo === Parte B - GPU + CPU sotto stress ===
-call :run_test 04_completo_gpu_cpu_scala2_run1 "--scale %SCALA_2%"
-call :run_test 05_completo_gpu_cpu_scala2_run2 "--scale %SCALA_2%"
-call :run_test 06_onde_quadre_gpu_cpu_scala2_run1 "--only square --scale %SCALA_2%"
-call :run_test 07_onde_quadre_gpu_cpu_scala2_run2 "--only square --scale %SCALA_2%"
-call :run_test 08_onde_quadre_gpu_cpu_scala2_run3 "--only square --scale %SCALA_2%"
-call :run_test 09_burst_gpu_cpu_scala2_run1 "--only burst --scale %SCALA_2%"
-call :run_test 10_burst_gpu_cpu_scala2_run2 "--only burst --scale %SCALA_2%"
-call :run_test 11_burst_gpu_cpu_scala2_run3 "--only burst --scale %SCALA_2%"
-echo.
-echo Parte B finita: puoi fermare lo stress della CPU.
+>> "%SLOG%" echo === Parte B - GPU + CPU sotto stress (--cpu) ===
+call :run_test 04_completo_gpu_cpu_scala2_run1 "--cpu --scale %SCALA_2%"
+call :run_test 05_completo_gpu_cpu_scala2_run2 "--cpu --scale %SCALA_2%"
+call :run_test 06_onde_quadre_gpu_cpu_scala2_run1 "--cpu --only square --scale %SCALA_2%"
+call :run_test 07_onde_quadre_gpu_cpu_scala2_run2 "--cpu --only square --scale %SCALA_2%"
+call :run_test 08_onde_quadre_gpu_cpu_scala2_run3 "--cpu --only square --scale %SCALA_2%"
+call :run_test 09_burst_gpu_cpu_scala2_run1 "--cpu --only burst --scale %SCALA_2%"
+call :run_test 10_burst_gpu_cpu_scala2_run2 "--cpu --only burst --scale %SCALA_2%"
+call :run_test 11_burst_gpu_cpu_scala2_run3 "--cpu --only burst --scale %SCALA_2%"
 
 :fine
 >> "%SLOG%" echo.

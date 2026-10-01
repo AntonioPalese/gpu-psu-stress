@@ -44,6 +44,7 @@ gpu-psu-stress/
 │   ├── patterns.hpp / .cpp   # sustained, idle, square wave, burst
 │   ├── monitor.hpp / .cpp    # thread NVML, campioni, gestione fasi
 │   ├── report.hpp / .cpp     # tabella riassuntiva e scrittura CSV
+│   ├── cpu_load.hpp / .cpp   # carico CPU in parallelo (--cpu)
 │   └── check.hpp             # macro CK() per CUDA e NK() per NVML
 ├── scripts/
 │   └── plot_log.py           # grafico potenza/clock/temperatura dal CSV
@@ -119,7 +120,7 @@ valori fissi (circa 8 blocchi per SM per FMA e tensor, 4 per la memoria).
 
 ```
 gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
-               [--only sustained|square|burst] [--list]
+               [--only sustained|square|burst] [--cpu | --cpu-threads N] [--list]
 ```
 
 - `--scale`: moltiplicatore di tutte le durate (default 1.0; circa 3,5 minuti totali).
@@ -127,6 +128,12 @@ gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
 - `--device`: GPU CUDA da usare (default 0).
 - `--only`: esegue solo un gruppo di test.
 - `--list`: stampa la sequenza delle fasi con le durate stimate ed esce.
+- `--cpu` / `--cpu-threads N`: carico CPU interno (`cpu_load.cpp`), un thread per processore
+  logico di default. Parte dopo la calibrazione, fase nascosta `_riscaldamento CPU` di
+  30 s × `--scale`, poi resta attivo per tutta la sequenza. Kernel `x = x*x - 1.9` con 8 catene
+  indipendenti: AVX2+FMA con rilevamento a runtime (nessun flag di compilazione globale),
+  altrimenti scalare. Thread a priorità bassa (API di sistema dietro `#ifdef`). Stampare a fine
+  test thread, ISA e GFLOPS medi. Il CSV non cambia.
 - Validare gli argomenti e stampare un help chiaro in italiano se non sono validi.
 - All'avvio stampare nome GPU, numero di SM, compute capability, VRAM, power limit attivo e di default.
 - Gestire Ctrl+C: fermare i carichi, chiudere il monitor e **scrivere comunque** riepilogo e CSV
@@ -187,8 +194,9 @@ Scrivere in italiano, per un utente non esperto di CUDA:
 - Come leggere la tabella e il grafico.
 - **Il verdetto reale**: se il PC arriva in fondo senza spegnersi, riavviarsi o andare in schermo nero,
   il PSU regge. Il coil whine durante le onde quadre è normale.
-- Consiglio: per lo scenario peggiore, stressare **anche la CPU** in parallelo
-  (Prime95 Small FFTs, `stress-ng --cpu 0`, o OCCT), perché il PSU alimenta tutto il sistema.
+- Consiglio: per lo scenario peggiore, stressare **anche la CPU** in parallelo con `--cpu`
+  (in alternativa Prime95 Small FFTs, `stress-ng --cpu 0`, o OCCT), perché il PSU alimenta
+  tutto il sistema.
 - Controllare che il connettore 12V-2x6 sia inserito completamente e senza pieghe strette.
 - Per misurare davvero i picchi sotto il millisecondo servono strumenti hardware
   (oscilloscopio con pinza amperometrica, NVIDIA PCAT, Elmorlabs PMD2).
