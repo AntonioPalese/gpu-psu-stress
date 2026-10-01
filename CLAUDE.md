@@ -76,8 +76,10 @@ valori fissi (circa 8 blocchi per SM per FMA e tensor, 4 per la memoria).
 - `calibrate(paramLaunch, stream, targetMs, name) -> Launch`: warm-up, poi 4 iterazioni di
   misura con `cudaEvent` che correggono `iters` proporzionalmente fino a `targetMs`.
   Stampare il risultato di ogni calibrazione.
-- Carichi da calibrare: FMA 2 ms, Tensor 2 ms, Tensor "short" 0.5 ms (per le onde quadre
-  ad alta frequenza), Memoria 2 ms.
+- Carichi da calibrare: FMA 2 ms, FMA "short" 0.5 ms (per le onde quadre ad alta frequenza),
+  Tensor 2 ms, Memoria 2 ms.
+- Onde quadre e burst usano l'FMA, non il tensor: sulla RTX 5070 l'FMA arriva al power limit
+  (~245 W) mentre il kernel tensor si ferma a ~100 W (misurato nei test del 2026-10-01).
 
 ### Pattern (`patterns.cpp`)
 
@@ -86,10 +88,10 @@ valori fissi (circa 8 blocchi per SM per FMA e tensor, 4 per la memoria).
   stream, poi sincronizza tutti gli stream; ripete fino alla scadenza. Più stream servono a
   sovrapporre tensor e memoria.
 - `squareWave(hz, shortLoad, stream, sec)`: per ogni periodo, pieno carico per metà periodo
-  (lanci ripetuti del carico "short" con sync), poi **spin-wait** fino a fine periodo.
+  (lanci ripetuti del carico FMA "short" con sync), poi **spin-wait** fino a fine periodo.
   Niente `sleep` qui: su Windows la granularità (~15 ms) rovinerebbe le frequenze alte.
 - `burstFromIdle(cycles, idleSec, burstSec)`: idle lungo (la GPU scende ai clock minimi),
-  poi tensor+memoria al massimo per un tempo breve.
+  poi FMA + memoria al massimo per un tempo breve.
 
 ### Monitor NVML (`monitor.cpp`)
 

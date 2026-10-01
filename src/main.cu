@@ -169,7 +169,8 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
         for (double hz : {1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0}) {
             const double sec = 10 * k;
             add(squareWaveName(hz), sec, [&c, hz, sec] {
-                squareWave(*c.mon, hz, c.loads->tensorShort, c.s1, sec);
+                // Carico FMA: il più energivoro, così l'escursione va da idle al power limit.
+                squareWave(*c.mon, hz, c.loads->fmaShort, c.s1, sec);
             });
             cooldown(3);
         }
@@ -183,8 +184,10 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
                       idleSec, burstSec * 1000);
         add(label, cycles * (idleSec + burstSec),
             [&c, cycles, idleSec, burstSec] {
+                // FMA + memoria su due stream: tutti i core e il controller di memoria
+                // partono insieme dall'idle.
                 burstFromIdle(*c.mon, cycles, idleSec, burstSec,
-                              {{c.loads->tensor, c.s1}, {c.loads->mem, c.s2}});
+                              {{c.loads->fma, c.s1}, {c.loads->mem, c.s2}});
             });
     }
     return plan;

@@ -26,10 +26,10 @@ public:
     // Alloca i buffer (dimensionati sul numero di SM) e calibra tutti i carichi.
     void init(const cudaDeviceProp& prop, cudaStream_t stream);
 
-    Launch fma;          // FP32, 2 ms
-    Launch tensor;       // tensor core, 2 ms
-    Launch tensorShort;  // tensor core, 0.5 ms (onde quadre ad alta frequenza)
-    Launch mem;          // memoria, 2 ms
+    Launch fma;       // FP32, 2 ms
+    Launch fmaShort;  // FP32, 0.5 ms (onde quadre ad alta frequenza)
+    Launch tensor;    // tensor core, 2 ms
+    Launch mem;       // memoria, 2 ms
 
 private:
     float* fmaOut_ = nullptr;

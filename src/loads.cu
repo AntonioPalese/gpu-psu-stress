@@ -115,8 +115,10 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
 
     std::printf("Calibrazione dei carichi...\n");
     fma = calibrate(fmaP, stream, 2.0, "FMA");
+    // Onde quadre e burst usano l'FMA: sulla RTX 5070 è il carico che assorbe di più
+    // (~245 W, al power limit) contro i ~100 W del kernel tensor.
+    fmaShort = calibrate(fmaP, stream, 0.5, "FMA short");
     tensor = calibrate(tensorP, stream, 2.0, "Tensor");
-    tensorShort = calibrate(tensorP, stream, 0.5, "Tensor short");
     mem = calibrate(memP, stream, 2.0, "Memoria");
 }
 
