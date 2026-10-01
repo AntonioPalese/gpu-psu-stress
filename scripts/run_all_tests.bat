@@ -1,24 +1,24 @@
 @echo off
 rem ===========================================================================
-rem  run_all_tests.bat - esegue in serie tutti i test di gpu-psu-stress
+rem  run_all_tests.bat - runs all gpu-psu-stress tests in sequence
 rem
-rem  Uso:  run_all_tests.bat           sessione completa (circa 55 minuti)
-rem        run_all_tests.bat rapido    prova della sessione con durate minime (~3 min)
+rem  Usage:  run_all_tests.bat           full session (about 55 minutes)
+rem          run_all_tests.bat rapido    trial of the session with minimal durations (~3 min)
 rem
-rem  L'eseguibile viene cercato accanto a questo file, poi in ..\build\Release.
-rem  Tutto l'output va in gpu-psu-out\sessione_AAAAMMGG_HHMMSS\ accanto a questo file:
-rem    NN_<test>.csv   campioni NVML del test
-rem    NN_<test>.log   output completo del programma (calibrazione, fasi, riepilogo)
-rem    sessione.log    GPU, driver, comandi eseguiti, orari ed esito di ogni test
+rem  The executable is looked for next to this file, then in ..\build\Release.
+rem  All output goes to gpu-psu-out\sessione_YYYYMMDD_HHMMSS\ next to this file:
+rem    NN_<test>.csv   NVML samples of the test
+rem    NN_<test>.log   complete program output (calibration, phases, summary)
+rem    sessione.log    GPU, driver, commands run, times and outcome of each test
 rem
-rem  Ctrl+C interrompe il test in corso (il CSV viene salvato comunque); alla domanda
-rem  "Terminare il processo batch (S/N)?" rispondi N per passare al test successivo,
-rem  S per fermare tutta la sessione.
+rem  Ctrl+C stops the running test (the CSV is still saved); when asked
+rem  "Terminare il processo batch (S/N)?" answer N to move on to the next test,
+rem  S to stop the whole session.
 rem ===========================================================================
 setlocal
 chcp 65001 >nul
 
-rem --- Durate (moltiplicatori --scale) e pausa tra un test e l'altro ---------
+rem --- Durations (--scale multipliers) and pause between tests ---------------
 set "SCALA_BREVE=0.05"
 set "SCALA_1=1"
 set "SCALA_2=2"
@@ -32,7 +32,7 @@ if /i "%~1"=="rapido" (
     set "PAUSA_S=2"
 )
 
-rem --- Eseguibile ------------------------------------------------------------
+rem --- Executable ------------------------------------------------------------
 set "EXE=%~dp0gpu-psu-stress.exe"
 if not exist "%EXE%" set "EXE=%~dp0..\build\Release\gpu-psu-stress.exe"
 if not exist "%EXE%" (
@@ -43,16 +43,16 @@ if not exist "%EXE%" (
 )
 for %%F in ("%EXE%") do set "EXE=%%~fF"
 
-rem --- Cartella della sessione -----------------------------------------------
+rem --- Session folder --------------------------------------------------------
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TS=%%T"
 set "OUT=%~dp0gpu-psu-out\sessione_%TS%"
 if defined RAPIDO set "OUT=%~dp0gpu-psu-out\rapido_%TS%"
 mkdir "%OUT%" 2>nul
 set "SLOG=%OUT%\sessione.log"
 
-rem Comando PowerShell che esegue il programma mostrando l'output a schermo e
-rem salvandolo nel .log (UTF-8). Riceve eseguibile, argomenti e log da variabili
-rem d'ambiente, cosi' non ci sono problemi di virgolette.
+rem PowerShell command that runs the program, showing the output on screen and
+rem saving it to the .log (UTF-8). It receives executable, arguments and log path
+rem through environment variables, so there are no quoting problems.
 set "PS_TEE=$ErrorActionPreference='Continue'; $e=New-Object Text.UTF8Encoding($false); [Console]::OutputEncoding=$e; $w=New-Object IO.StreamWriter($env:GPS_LOG,$false,$e); $w.AutoFlush=$true; $w.WriteLine('Comando: gpu-psu-stress '+$env:GPS_ARGS); $w.WriteLine('Avvio: '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')); $w.WriteLine(''); $rc=-1; try { & $env:GPS_EXE ($env:GPS_ARGS -split ' ') 2>&1 | ForEach-Object { if ($_ -is [Management.Automation.ErrorRecord]) { $l=[string]$_.TargetObject } else { $l=[string]$_ }; [Console]::WriteLine($l); $w.WriteLine($l) }; $rc=$LASTEXITCODE } finally { $w.WriteLine(''); $w.WriteLine('Fine: '+(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')+' - codice di uscita '+$rc); $w.Close() }; exit $rc"
 
 > "%SLOG%" echo Sessione gpu-psu-stress del %date% %time%
@@ -76,15 +76,15 @@ echo.
 
 set /a NFAIL=0
 
-rem --- Parte A: solo GPU ---------------------------------------------------------
+rem --- Part A: GPU only ----------------------------------------------------------
 >> "%SLOG%" echo === Parte A - solo GPU ===
 call :run_test 01_prova_breve_gpu_sola "--scale %SCALA_BREVE%"
 call :run_test 02_completo_gpu_sola_scala1 "--scale %SCALA_1%"
 call :run_test 03_completo_gpu_sola_scala2 "--scale %SCALA_2%"
 
-rem --- Parte B: GPU + CPU -------------------------------------------------------
-rem Il carico CPU e' interno al programma (--cpu): parte dopo la calibrazione, si scalda
-rem per 30 s x scala e resta al massimo per tutto il test. Nessun software esterno.
+rem --- Part B: GPU + CPU --------------------------------------------------------
+rem The CPU load is built into the program (--cpu): it starts after calibration, warms up
+rem for 30 s x scale and stays at the maximum for the whole test. No external software.
 echo.
 echo ============================================================================
 echo  Parte B - GPU + CPU: il programma carica anche tutti i core della CPU (--cpu)
@@ -115,8 +115,8 @@ endlocal & exit /b %NFAIL%
 
 
 rem ---------------------------------------------------------------------------
-rem  :run_test <nome> "<argomenti>"
-rem  Esegue un test nella cartella della sessione: <nome>.csv e <nome>.log.
+rem  :run_test <name> "<arguments>"
+rem  Runs a test in the session folder: <name>.csv and <name>.log.
 rem ---------------------------------------------------------------------------
 :run_test
 set "NAME=%~1"
@@ -140,7 +140,7 @@ if "%RC%"=="0" (
     set /a NFAIL+=1
     echo  ATTENZIONE: %NAME% non completato, codice di uscita %RC%
 )
-rem Pausa tra un test e l'altro: la GPU si raffredda e i test restano confrontabili.
+rem Pause between tests: the GPU cools down and the tests stay comparable.
 echo  Pausa di %PAUSA_S% s prima del prossimo test...
 powershell -NoProfile -Command "Start-Sleep -Seconds %PAUSA_S%"
 exit /b 0

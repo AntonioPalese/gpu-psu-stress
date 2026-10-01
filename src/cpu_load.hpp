@@ -1,7 +1,7 @@
 #pragma once
-// Carico CPU: un thread per processore logico che esegue FMA in virgola mobile senza sosta,
-// in parallelo ai test GPU. Simula lo scenario peggiore per l'alimentatore (CPU e GPU al
-// massimo insieme) senza software esterni.
+// CPU load: one thread per logical processor running floating-point FMA non-stop,
+// in parallel with the GPU tests. Simulates the worst case for the power supply (CPU and GPU
+// at full load together) without external software.
 
 #include <atomic>
 #include <chrono>
@@ -17,22 +17,22 @@ public:
     CpuLoad(const CpuLoad&) = delete;
     CpuLoad& operator=(const CpuLoad&) = delete;
 
-    // Avvia 'threads' thread di carico (<= 0: uno per processore logico).
+    // Starts 'threads' load threads (<= 0: one per logical processor).
     void start(int threads);
-    // Ferma e attende i thread (idempotente).
+    // Stops and joins the threads (idempotent).
     void stop();
 
     int threads() const { return static_cast<int>(threads_.size()); }
-    // "AVX2+FMA" se la CPU lo supporta, altrimenti "scalari".
+    // "AVX2+FMA" if the CPU supports it, otherwise "scalari" (scalar).
     const char* isaName() const { return avx2_ ? "AVX2+FMA" : "scalari"; }
-    // GFLOPS medi tra start() e stop() (o fino ad ora se ancora attivo).
+    // Average GFLOPS between start() and stop() (or until now if still running).
     double gflops() const;
     double seconds() const;
 
     static int defaultThreads();
 
 private:
-    struct alignas(64) Counter {  // un contatore per thread, su linee di cache separate
+    struct alignas(64) Counter {  // one counter per thread, on separate cache lines
         std::atomic<uint64_t> iters{0};
     };
 

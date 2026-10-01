@@ -7,7 +7,7 @@
 Monitor::Monitor(int cudaDevice) {
     NK(nvmlInit_v2());
 
-    // Gli indici CUDA e NVML possono non coincidere: si passa dal PCI bus ID.
+    // CUDA and NVML indices may not match: go through the PCI bus ID.
     char busId[64] = {};
     CK(cudaDeviceGetPCIBusId(busId, sizeof(busId), cudaDevice));
     NK(nvmlDeviceGetHandleByPciBusId_v2(busId, &handle_));
@@ -87,7 +87,7 @@ Sample Monitor::takeSample() {
         fv.fieldId = NVML_FI_DEV_POWER_INSTANT;
         if (nvmlDeviceGetFieldValues(handle_, 1, &fv) == NVML_SUCCESS &&
             fv.nvmlReturn == NVML_SUCCESS) {
-            double v = -1000.0;  // valore in mW
+            double v = -1000.0;  // value in mW
             switch (fv.valueType) {
                 case NVML_VALUE_TYPE_DOUBLE: v = fv.value.dVal; break;
                 case NVML_VALUE_TYPE_UNSIGNED_INT: v = fv.value.uiVal; break;
@@ -118,7 +118,7 @@ void Monitor::run(int sampleMs) {
             std::lock_guard<std::mutex> lock(mutex_);
             samples_.push_back(s);
         }
-        // Scadenze assolute per non accumulare deriva; se si è in ritardo si riparte da ora.
+        // Absolute deadlines to avoid accumulating drift; if late, restart from now.
         next += period;
         auto now = clock::now();
         if (next < now) next = now;

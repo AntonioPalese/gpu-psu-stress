@@ -1,5 +1,5 @@
-// gpu-psu-stress: genera transienti di potenza sulla GPU per verificare la tenuta
-// dell'alimentatore, monitorando potenza, clock e temperatura tramite NVML.
+// gpu-psu-stress: generates power transients on the GPU to check whether the power supply
+// holds up, monitoring power, clocks and temperature through NVML.
 
 #include <csignal>
 #include <cstdio>
@@ -33,8 +33,8 @@ struct Options {
     std::string out = "power_log.csv";
     std::string only;  // "", "sustained", "square", "burst"
     bool list = false;
-    bool cpu = false;     // carico CPU in parallelo
-    int cpuThreads = 0;   // 0 = uno per processore logico
+    bool cpu = false;     // CPU load in parallel
+    int cpuThreads = 0;   // 0 = one per logical processor
 };
 
 void printHelp(const char* prog) {
@@ -129,7 +129,7 @@ Options parseArgs(int argc, char** argv) {
     return o;
 }
 
-// Contesto condiviso dai passi della sequenza; riempito dopo l'eventuale --list.
+// Context shared by the sequence steps; filled in after the optional --list.
 struct Context {
     Monitor* mon = nullptr;
     LoadSet* loads = nullptr;
@@ -160,7 +160,7 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
     };
 
     if (o.cpu) {
-        // Il consumo della CPU impiega qualche secondo a stabilizzarsi (temperatura, boost).
+        // CPU power takes a few seconds to settle (temperature, boost).
         const double sec = 30 * k;
         add("_riscaldamento CPU", sec, [&c, sec] { idle(*c.mon, "_riscaldamento CPU", sec); });
     }
@@ -187,7 +187,7 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
         for (double hz : {1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0}) {
             const double sec = 10 * k;
             add(squareWaveName(hz), sec, [&c, hz, sec] {
-                // Carico FMA: il più energivoro, così l'escursione va da idle al power limit.
+                // FMA load: the most power-hungry, so the swing goes from idle to the power limit.
                 squareWave(*c.mon, hz, c.loads->fmaShort, c.s1, sec);
             });
             cooldown(3);
@@ -196,14 +196,14 @@ std::vector<Step> buildPlan(const Options& o, Context& c) {
     if (o.only.empty() || o.only == "burst") {
         const int cycles = 10;
         const double idleSec = 3 * k;
-        const double burstSec = 0.3;  // non scalato: è la durata del transitorio
+        const double burstSec = 0.3;  // not scaled: it is the transient duration
         char label[96];
         std::snprintf(label, sizeof(label), "Burst da idle (%d x %.3g s idle + %.0f ms)", cycles,
                       idleSec, burstSec * 1000);
         add(label, cycles * (idleSec + burstSec),
             [&c, cycles, idleSec, burstSec] {
-                // FMA + memoria su due stream: tutti i core e il controller di memoria
-                // partono insieme dall'idle.
+                // FMA + memory on two streams: all cores and the memory controller
+                // start together from idle.
                 burstFromIdle(*c.mon, cycles, idleSec, burstSec,
                               {{c.loads->fma, c.s1}, {c.loads->mem, c.s2}});
             });
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
     cudaDeviceProp prop{};
     CK(cudaGetDeviceProperties(&prop, opt.device));
 
-    // Il binario contiene codice per questa GPU?
+    // Does the binary contain code for this GPU?
     cudaFuncAttributes attr{};
     if (cudaFuncGetAttributes(&attr, fmaBurn) != cudaSuccess) {
         std::fprintf(stderr,
@@ -286,12 +286,12 @@ int main(int argc, char** argv) {
         std::printf("Nota: GPU senza tensor core, il carico tensor usa FMA come ripiego.\n\n");
 
 #ifdef _WIN32
-    timeBeginPeriod(1);  // sleep con granularità di 1 ms per monitor e idle
+    timeBeginPeriod(1);  // 1 ms sleep granularity for the monitor and idle
 #endif
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 #ifdef SIGBREAK
-    std::signal(SIGBREAK, onSignal);  // Ctrl+Break su Windows
+    std::signal(SIGBREAK, onSignal);  // Ctrl+Break on Windows
 #endif
 
     cudaStream_t s1, s2;
@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
     loads.init(prop, s1);
     ctx = Context{&mon, &loads, s1, s2};
 
-    // Il carico CPU parte dopo la calibrazione, per non disturbarla.
+    // The CPU load starts after calibration, so it does not disturb it.
     CpuLoad cpu;
     if (opt.cpu) {
         cpu.start(opt.cpuThreads);
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
     }
     CK(cudaDeviceSynchronize());
     cpu.stop();
-    // Qualche campione finale a riposo per chiudere il log.
+    // A few final idle samples to close the log.
     if (!g_stopRequested) idle(mon, "_fine", 0.2);
     mon.stop();
 

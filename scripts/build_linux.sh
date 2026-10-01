@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Compila il binario Linux di gpu-psu-stress dentro un container CUDA 12.8 (podman o docker).
-# Funziona sia da Linux sia da Windows (Git Bash), e non serve avere CUDA installato sull'host.
+# Builds the gpu-psu-stress Linux binary inside a CUDA 12.8 container (podman or docker).
+# Works both from Linux and from Windows (Git Bash), and CUDA does not need to be installed
+# on the host.
 #
-# Uso: scripts/build_linux.sh [architetture]
-#   architetture: valore di CMAKE_CUDA_ARCHITECTURES, default "120" (RTX 50xx).
-#                 Es.: scripts/build_linux.sh "75;120"
-# Variabili: ENGINE=podman|docker   CUDA_IMAGE=<immagine>
+# Usage: scripts/build_linux.sh [architectures]
+#   architectures: value of CMAKE_CUDA_ARCHITECTURES, default "120" (RTX 50xx).
+#                  E.g.: scripts/build_linux.sh "75;120"
+# Variables: ENGINE=podman|docker   CUDA_IMAGE=<image>
 #
-# Risultato: build-linux/gpu-psu-stress (sul PC di destinazione basta il driver NVIDIA).
+# Result: build-linux/gpu-psu-stress (the target PC only needs the NVIDIA driver).
 
 set -euo pipefail
 
@@ -20,15 +21,15 @@ if [ -z "$ENGINE" ]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# Su Git Bash (Windows) il motore dei container vuole un percorso Windows e niente
-# conversione automatica dei percorsi in stile Unix.
+# On Git Bash (Windows) the container engine wants a Windows path and no automatic
+# conversion of Unix-style paths.
 if [ -n "${MSYSTEM:-}" ]; then
     ROOT="$(cd "$ROOT" && pwd -W)"
     export MSYS_NO_PATHCONV=1
 fi
 
-# Su Linux i file creati nel container appartengono a root: alla fine li si restituisce
-# all'utente che ha lanciato lo script.
+# On Linux the files created in the container belong to root: at the end they are handed
+# back to the user who ran the script.
 OWNER="$(id -u):$(id -g)"
 
 echo "Motore: $ENGINE | immagine: $IMAGE | architetture: $ARCHS"

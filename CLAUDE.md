@@ -1,123 +1,130 @@
-# gpu-psu-stress — Istruzioni per Claude Code
+# gpu-psu-stress — Instructions for Claude Code
 
-## Obiettivo del progetto
+## Project goal
 
-Sviluppare da zero un tool da riga di comando in CUDA C++ che mette sotto stress una GPU NVIDIA
-(target principale: **RTX 5070, Blackwell, compute capability 12.0 / sm_120, TGP 250 W**) per
-verificare se un alimentatore da **650 W** regge i picchi transitori di assorbimento.
+Build from scratch a command-line tool in CUDA C++ that stresses an NVIDIA GPU
+(main target: **RTX 5070, Blackwell, compute capability 12.0 / sm_120, TGP 250 W**) to
+check whether a **650 W** power supply can handle transient power spikes.
 
-Il tool deve:
+The tool must:
 
-1. **Generare** pattern di carico che provocano transienti di potenza in modo ripetibile
-   (carichi sostenuti, onde quadre a varie frequenze, burst da idle).
-2. **Monitorare** potenza, clock e temperatura tramite NVML in un thread separato.
-3. **Riassumere** i risultati a schermo per fase e **salvare** un log CSV completo.
-4. **Visualizzare** il log con uno script Python separato.
+1. **Generate** load patterns that cause power transients in a repeatable way
+   (sustained loads, square waves at several frequencies, bursts from idle).
+2. **Monitor** power, clocks and temperature through NVML in a separate thread.
+3. **Summarize** the results on screen per phase and **save** a complete CSV log.
+4. **Visualize** the log with a separate Python script.
 
-Limite noto da documentare sempre: NVML campiona ogni ~10–100 ms e **non può misurare** i
-transienti sotto il millisecondo. Il tool li provoca; il verdetto reale è se il sistema si
-spegne o si riavvia (intervento OCP/OPP dell'alimentatore).
+Known limitation, always to be documented: NVML samples every ~10–100 ms and **cannot measure**
+sub-millisecond transients. The tool causes them; the real verdict is whether the system
+shuts down or reboots (PSU OCP/OPP tripping).
 
-## Vincoli tecnici
+## Technical constraints
 
-- Linguaggio: CUDA C++17. Toolkit richiesto: **CUDA ≥ 12.8** (necessario per sm_120).
-- Build: **CMake ≥ 3.24**, con `CMAKE_CUDA_ARCHITECTURES` di default `120` e sovrascrivibile
-  (es. `89` per Ada, `86` per Ampere) così il tool si usa anche su altre GPU.
-- Dipendenze: solo CUDA runtime e NVML (`CUDA::nvml` via `find_package(CUDAToolkit)`).
-  Niente cuBLAS o librerie esterne: i kernel di carico sono scritti a mano.
-- Piattaforme: Linux e Windows. Niente API specifiche di un solo sistema operativo
-  nel codice principale; se servono (es. `timeBeginPeriod` su Windows), isolarle dietro `#ifdef _WIN32`.
-- Script di analisi: Python 3.10+, dipendenze solo `pandas` e `matplotlib`.
-- Commenti nel codice e output del programma **in italiano**; identificatori in inglese.
+- Language: CUDA C++17. Required toolkit: **CUDA ≥ 12.8** (needed for sm_120).
+- Build: **CMake ≥ 3.24**, with `CMAKE_CUDA_ARCHITECTURES` defaulting to `120` and overridable
+  (e.g. `89` for Ada, `86` for Ampere) so the tool can also be used on other GPUs.
+- Dependencies: only the CUDA runtime and NVML (`CUDA::nvml` via `find_package(CUDAToolkit)`).
+  No cuBLAS or external libraries: the load kernels are hand-written.
+- Platforms: Linux and Windows. No OS-specific APIs in the main code; where needed
+  (e.g. `timeBeginPeriod` on Windows), isolate them behind `#ifdef _WIN32`.
+- Analysis script: Python 3.10+, dependencies limited to `pandas` and `matplotlib`.
+- Code comments and documentation **in English**; program output (messages, help, summary
+  table, phase names) **in Italian**; identifiers in English.
 
-## Struttura del repository
+## Repository layout
 
 ```
 gpu-psu-stress/
 ├── CLAUDE.md
-├── README.md                 # guida utente (italiano)
+├── README.md                 # user guide (English)
 ├── CMakeLists.txt
+├── pyproject.toml / uv.lock  # Python environment for the scripts (uv)
 ├── src/
-│   ├── main.cu               # parsing CLI, orchestrazione delle fasi, riepilogo
-│   ├── kernels.cuh / .cu     # kernel di carico
-│   ├── loads.hpp / .cu       # calibrazione e astrazione "Load"
+│   ├── main.cu               # CLI parsing, phase orchestration, summary
+│   ├── kernels.cuh / .cu     # load kernels
+│   ├── loads.hpp / .cu       # calibration and the "Load" abstraction
 │   ├── patterns.hpp / .cpp   # sustained, idle, square wave, burst
-│   ├── monitor.hpp / .cpp    # thread NVML, campioni, gestione fasi
-│   ├── report.hpp / .cpp     # tabella riassuntiva e scrittura CSV
-│   ├── cpu_load.hpp / .cpp   # carico CPU in parallelo (--cpu)
-│   └── check.hpp             # macro CK() per CUDA e NK() per NVML
+│   ├── monitor.hpp / .cpp    # NVML thread, samples, phase handling
+│   ├── report.hpp / .cpp     # summary table and CSV writing
+│   ├── cpu_load.hpp / .cpp   # parallel CPU load (--cpu)
+│   └── check.hpp             # CK() macro for CUDA and NK() for NVML
 ├── scripts/
-│   └── plot_log.py           # grafico potenza/clock/temperatura dal CSV
+│   ├── plot_log.py           # power/clock/temperature chart from the CSV
+│   ├── build_linux.sh        # Linux build inside a CUDA 12.8 container
+│   └── run_all_tests.bat     # full Windows test session (output in gpu-psu-out/)
+├── docs/
+│   ├── test-procedure-5070.md  # step-by-step test procedure and external tools
+│   └── build-plan-sm120.md     # building for sm_120 on a PC without the target GPU
 └── tests/
-    └── smoke_test.sh         # esecuzione breve con --scale 0.05
+    └── smoke_test.sh         # short run with --scale 0.05
 ```
 
-## Specifiche dei componenti
+## Component specifications
 
-### Kernel di carico (`kernels.cu`)
+### Load kernels (`kernels.cu`)
 
-Tutti i kernel ricevono un parametro `iters` che ne controlla la durata e **scrivono sempre**
-un risultato in memoria globale, così il compilatore non elimina il lavoro.
+All kernels take an `iters` parameter that controls their duration and **always write**
+a result to global memory, so the compiler cannot eliminate the work.
 
-- **`fmaBurn`**: FP32 puro, 8 catene indipendenti per thread. Usare la mappa `x = fmaf(x, x, -1.9f)`,
-  che è caotica ma limitata: i bit commutano molto (più consumo) senza divergere a inf/NaN.
-- **`tensorBurn`**: tensor core tramite WMMA (`nvcuda::wmma`), frammenti 16×16×16,
-  input `__half`, accumulo `float`, 4 accumulatori indipendenti per ILP.
-  Matrici caricate da shared memory una sola volta, poi `mma_sync` in loop. 4 warp per blocco.
-- **`memBurn`**: streaming read+write su `float4` con grid-stride loop su 2 buffer,
-  alternando sorgente e destinazione a ogni lancio. I buffer occupano **tutta la VRAM libera**
-  (`cudaMemGetInfo`) meno un margine di max(512 MB, 5% di `totalGlobalMem`), divisa in due;
-  se l'allocazione fallisce si riprova con il 5% in meno. Ogni lancio riparte dall'indice in
-  cui si è fermato il precedente (parametro `start`), così lanci successivi percorrono tutta la
-  memoria allocata e non solo i primi GB.
+- **`fmaBurn`**: pure FP32, 8 independent chains per thread. Use the map `x = fmaf(x, x, -1.9f)`,
+  which is chaotic but bounded: bits toggle a lot (higher power) without diverging to inf/NaN.
+- **`tensorBurn`**: tensor cores through WMMA (`nvcuda::wmma`), 16×16×16 fragments,
+  `__half` inputs, `float` accumulation, 4 independent accumulators for ILP.
+  Matrices loaded from shared memory once, then `mma_sync` in a loop. 4 warps per block.
+- **`memBurn`**: streaming read+write on `float4` with a grid-stride loop over 2 buffers,
+  swapping source and destination on every launch. The buffers take **all free VRAM**
+  (`cudaMemGetInfo`) minus a margin of max(512 MB, 5% of `totalGlobalMem`), split in two;
+  if the allocation fails, retry with 5% less. Each launch resumes from the index where the
+  previous one stopped (`start` parameter), so successive launches sweep all allocated
+  memory and not just the first GBs.
 
-Dimensionamento griglia: derivare sempre dal numero di SM (`multiProcessorCount`), mai
-valori fissi (circa 8 blocchi per SM per FMA e tensor, 4 per la memoria).
+Grid sizing: always derive it from the SM count (`multiProcessorCount`), never use
+fixed values (about 8 blocks per SM for FMA and tensor, 4 for memory).
 
-### Calibrazione e astrazione dei carichi (`loads.cu`)
+### Calibration and load abstraction (`loads.cu`)
 
 - `ParamLaunch = std::function<void(cudaStream_t, int iters)>`
 - `Launch = std::function<void(cudaStream_t)>`
-- `calibrate(paramLaunch, stream, targetMs, name) -> Launch`: warm-up, poi 4 iterazioni di
-  misura con `cudaEvent` che correggono `iters` proporzionalmente fino a `targetMs`.
-  Stampare il risultato di ogni calibrazione.
-- Carichi da calibrare: FMA 2 ms, FMA "short" 0.5 ms (per le onde quadre ad alta frequenza),
-  Tensor 2 ms, Memoria 2 ms.
-- Onde quadre e burst usano l'FMA, non il tensor: sulla RTX 5070 l'FMA arriva al power limit
-  (~245 W) mentre il kernel tensor si ferma a ~100 W (misurato nei test del 2026-10-01).
+- `calibrate(paramLaunch, stream, targetMs, name) -> Launch`: warm-up, then 4 measurement
+  iterations with `cudaEvent` that correct `iters` proportionally until `targetMs` is reached.
+  Print the result of each calibration.
+- Loads to calibrate: FMA 2 ms, FMA "short" 0.5 ms (for high-frequency square waves),
+  Tensor 2 ms, Memory 2 ms.
+- Square waves and bursts use FMA, not tensor: on the RTX 5070 FMA reaches the power limit
+  (~245 W) while the tensor kernel stops at ~100 W (measured in the 2026-10-01 tests).
 
-### Pattern (`patterns.cpp`)
+### Patterns (`patterns.cpp`)
 
-- `idle(name, sec)`: imposta la fase e dorme.
-- `sustained(name, {(Launch, stream)...}, sec)`: lancia tutti i carichi, ciascuno sul proprio
-  stream, poi sincronizza tutti gli stream; ripete fino alla scadenza. Più stream servono a
-  sovrapporre tensor e memoria.
-- `squareWave(hz, shortLoad, stream, sec)`: per ogni periodo, pieno carico per metà periodo
-  (lanci ripetuti del carico FMA "short" con sync), poi **spin-wait** fino a fine periodo.
-  Niente `sleep` qui: su Windows la granularità (~15 ms) rovinerebbe le frequenze alte.
-- `burstFromIdle(cycles, idleSec, burstSec)`: idle lungo (la GPU scende ai clock minimi),
-  poi FMA + memoria al massimo per un tempo breve.
+- `idle(name, sec)`: sets the phase and sleeps.
+- `sustained(name, {(Launch, stream)...}, sec)`: launches all loads, each on its own
+  stream, then synchronizes all streams; repeats until the deadline. Multiple streams are used
+  to overlap tensor and memory work.
+- `squareWave(hz, shortLoad, stream, sec)`: for each period, full load for half the period
+  (repeated launches of the FMA "short" load with sync), then **spin-wait** until the end of
+  the period. No `sleep` here: on Windows its granularity (~15 ms) would ruin the high frequencies.
+- `burstFromIdle(cycles, idleSec, burstSec)`: long idle (the GPU drops to minimum clocks),
+  then FMA + memory at full load for a short time.
 
-### Monitor NVML (`monitor.cpp`)
+### NVML monitor (`monitor.cpp`)
 
-- Ottenere l'handle NVML **tramite PCI bus ID** (`cudaDeviceGetPCIBusId` →
-  `nvmlDeviceGetHandleByPciBusId_v2`), non per indice: con più GPU gli indici CUDA e NVML
-  possono non coincidere.
-- Per ogni campione registrare: timestamp, indice di fase, `nvmlDeviceGetPowerUsage` (media),
-  potenza istantanea tramite `NVML_FI_DEV_POWER_INSTANT` (dentro `#ifdef`, perché il campo
-  esiste solo in header recenti; convertire in base a `valueType`; se non disponibile, -1),
-  clock SM, clock memoria, temperatura.
-- Accesso ai campioni e ai nomi di fase protetto da mutex; fase corrente in `std::atomic<int>`.
-- `setPhase(name)` riusa l'indice se il nome esiste già. Le fasi il cui nome inizia con `_`
-  (cooldown, idle tra burst) non vengono stampate né mostrate nel riepilogo.
+- Get the NVML handle **through the PCI bus ID** (`cudaDeviceGetPCIBusId` →
+  `nvmlDeviceGetHandleByPciBusId_v2`), not by index: with several GPUs, CUDA and NVML indices
+  may not match.
+- For each sample record: timestamp, phase index, `nvmlDeviceGetPowerUsage` (average),
+  instantaneous power through `NVML_FI_DEV_POWER_INSTANT` (inside `#ifdef`, because the field
+  only exists in recent headers; convert according to `valueType`; -1 if unavailable),
+  SM clock, memory clock, temperature.
+- Access to samples and phase names protected by a mutex; current phase in `std::atomic<int>`.
+- `setPhase(name)` reuses the index if the name already exists. Phases whose name starts with `_`
+  (cooldown, idle between bursts) are neither printed nor shown in the summary.
 
 ### Report (`report.cpp`)
 
-- Tabella per fase: numero campioni, media W, max W, max istantanea W (o "n/d"),
-  max clock SM, max temperatura.
-- Picco globale e percentuale rispetto al power limit attivo (`nvmlDeviceGetEnforcedPowerLimit`).
-- Stampare sempre l'avviso che NVML non vede i transienti sotto il millisecondo.
-- CSV con intestazione:
+- Per-phase table: sample count, average W, max W, max instantaneous W (or "n/d"),
+  max SM clock, max temperature.
+- Global peak and percentage of the enforced power limit (`nvmlDeviceGetEnforcedPowerLimit`).
+- Always print the warning that NVML cannot see sub-millisecond transients.
+- CSV with header:
   `t_s,phase,power_avg_W,power_instant_W,sm_clock_MHz,mem_clock_MHz,temp_C`
 
 ### CLI (`main.cu`)
@@ -127,90 +134,90 @@ gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
                [--only sustained|square|burst] [--cpu | --cpu-threads N] [--list]
 ```
 
-- `--scale`: moltiplicatore di tutte le durate (default 1.0; circa 3,5 minuti totali).
-- `--sample-ms`: periodo di campionamento NVML (default 10, minimo 1).
-- `--device`: GPU CUDA da usare (default 0).
-- `--only`: esegue solo un gruppo di test.
-- `--list`: stampa la sequenza delle fasi con le durate stimate ed esce.
-- `--cpu` / `--cpu-threads N`: carico CPU interno (`cpu_load.cpp`), un thread per processore
-  logico di default. Parte dopo la calibrazione, fase nascosta `_riscaldamento CPU` di
-  30 s × `--scale`, poi resta attivo per tutta la sequenza. Kernel `x = x*x - 1.9` con 8 catene
-  indipendenti: AVX2+FMA con rilevamento a runtime (nessun flag di compilazione globale),
-  altrimenti scalare. Thread a priorità bassa (API di sistema dietro `#ifdef`). Stampare a fine
-  test thread, ISA e GFLOPS medi. Il CSV non cambia.
-- Validare gli argomenti e stampare un help chiaro in italiano se non sono validi.
-- All'avvio stampare nome GPU, numero di SM, compute capability, VRAM, power limit attivo e di default.
-- Gestire Ctrl+C: fermare i carichi, chiudere il monitor e **scrivere comunque** riepilogo e CSV
-  con i dati raccolti fino a quel momento.
+- `--scale`: multiplier for all durations (default 1.0; about 3.5 minutes in total).
+- `--sample-ms`: NVML sampling period (default 10, minimum 1).
+- `--device`: CUDA GPU to use (default 0).
+- `--only`: runs only one group of tests.
+- `--list`: prints the phase sequence with estimated durations and exits.
+- `--cpu` / `--cpu-threads N`: built-in CPU load (`cpu_load.cpp`), one thread per logical
+  processor by default. Starts after calibration, hidden phase `_riscaldamento CPU` of
+  30 s × `--scale`, then stays active for the whole sequence. Kernel `x = x*x - 1.9` with 8
+  independent chains: AVX2+FMA with runtime detection (no global compiler flag), scalar
+  otherwise. Low-priority threads (OS APIs behind `#ifdef`). At the end of the test print
+  threads, ISA and average GFLOPS. The CSV does not change.
+- Validate arguments and print a clear help message in Italian when they are invalid.
+- At startup print GPU name, SM count, compute capability, VRAM, enforced and default power limit.
+- Handle Ctrl+C: stop the loads, close the monitor and **still write** the summary and the CSV
+  with the data collected so far.
 
-### Sequenza di test predefinita (durate base, moltiplicate per `--scale`)
+### Default test sequence (base durations, multiplied by `--scale`)
 
-| Fase | Durata |
+| Phase (name in the output) | Duration |
 |---|---|
-| idle baseline | 5 s |
-| FMA FP32 sostenuto | 20 s |
-| Tensor FP16 sostenuto | 20 s |
-| Memoria GDDR7 sostenuto | 15 s |
-| Tensor + memoria (max) | 30 s |
-| Onde quadre 1, 2, 5, 10, 20, 50, 100, 200 Hz | 10 s ciascuna |
-| Burst da idle: 10 cicli (3 s idle + 300 ms carico) | ~33 s |
+| idle baseline (`Idle baseline`) | 5 s |
+| sustained FP32 FMA (`FMA FP32 sostenuto`) | 20 s |
+| sustained FP16 tensor (`Tensor FP16 sostenuto`) | 20 s |
+| sustained memory (`Memoria VRAM sostenuto`) | 15 s |
+| tensor + memory, max (`Tensor + memoria (max)`) | 30 s |
+| square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz (`Onda quadra N Hz`) | 10 s each |
+| bursts from idle: 10 cycles, 3 s idle + 300 ms load (`Burst da idle`) | ~33 s |
 
-Tra una fase di carico e l'altra: cooldown `_cooldown` di 5 s (3 s dopo ogni onda quadra).
-La durata dei burst (300 ms) **non** va scalata.
+Between load phases: `_cooldown` of 5 s (3 s after each square wave).
+The burst duration (300 ms) is **not** scaled.
 
-### Script di analisi (`scripts/plot_log.py`)
+### Analysis script (`scripts/plot_log.py`)
 
-- Uso: `python scripts/plot_log.py power_log.csv [--out grafico.png]`
-- Tre pannelli con asse X condiviso: potenza (media e istantanea, più linea orizzontale
-  opzionale `--limit W`), clock SM, temperatura.
-- Sfondo colorato alternato per fase, con etichette per le fasi senza `_`.
-- Stampa anche una tabella riassuntiva per fase (come il report C++).
+- Usage: `python scripts/plot_log.py power_log.csv [--out chart.png]`
+- Three panels with a shared X axis: power (average and instantaneous, plus an optional
+  horizontal `--limit W` line), SM clock, temperature.
+- Alternating colored background per phase, with labels for phases without `_`.
+- Also prints a per-phase summary table (like the C++ report).
 
-## Piano di lavoro (milestone)
+## Work plan (milestones)
 
-Procedere in quest'ordine, con un commit per milestone e build verificata a ogni passo.
+Proceed in this order, with one commit per milestone and a verified build at each step.
 
-1. **Scheletro**: CMakeLists, `check.hpp`, `main.cu` che stampa le info della GPU. Build ok.
-2. **Monitor NVML**: thread di campionamento, gestione fasi, CSV. Test: 5 s di idle producono un CSV valido.
-3. **Kernel e calibrazione**: i tre kernel + `calibrate`. Test: stampa delle iterazioni calibrate.
-4. **Pattern**: sustained, square wave, burst. Test con `--scale 0.05`.
-5. **Report e CLI completa**: tabella, argomenti, `--list`, `--only`, gestione Ctrl+C.
-6. **Script Python** di plotting.
-7. **README.md** e `tests/smoke_test.sh`.
+1. **Skeleton**: CMakeLists, `check.hpp`, `main.cu` printing the GPU info. Build ok.
+2. **NVML monitor**: sampling thread, phase handling, CSV. Test: 5 s of idle produce a valid CSV.
+3. **Kernels and calibration**: the three kernels + `calibrate`. Test: calibrated iterations printed.
+4. **Patterns**: sustained, square wave, burst. Test with `--scale 0.05`.
+5. **Report and full CLI**: table, arguments, `--list`, `--only`, Ctrl+C handling.
+6. **Python plotting script**.
+7. **README.md** and `tests/smoke_test.sh`.
 
-## Verifica
+## Verification
 
-- Se nell'ambiente non c'è una GPU NVIDIA, verificare almeno che il progetto **compili**
-  (`cmake -B build && cmake --build build`) e dichiarare esplicitamente che l'esecuzione
-  non è stata testata. Non inventare output o risultati di esecuzione.
-- Se `nvcc` non è disponibile, dirlo chiaramente invece di aggirare il problema.
-- Controllare che `compute-sanitizer --tool memcheck ./gpu-psu-stress --scale 0.02` non riporti errori (se c'è una GPU).
-- Lo smoke test deve completarsi in meno di 30 secondi e verificare che il CSV esista e
-  contenga l'intestazione corretta e almeno una riga per ogni fase non nascosta.
-- Testare `plot_log.py` con un CSV di esempio generato sinteticamente (anche senza GPU).
+- If there is no NVIDIA GPU in the environment, at least verify that the project **builds**
+  (`cmake -B build && cmake --build build`) and state explicitly that execution was not
+  tested. Never invent output or execution results.
+- If `nvcc` is not available, say so clearly instead of working around it.
+- Check that `compute-sanitizer --tool memcheck ./gpu-psu-stress --scale 0.02` reports no errors (if a GPU is present).
+- The smoke test must complete in under 30 seconds and check that the CSV exists,
+  has the correct header and at least one row for every non-hidden phase.
+- Test `plot_log.py` with a synthetically generated sample CSV (even without a GPU).
 
-## Contenuto del README.md
+## README.md contents
 
-Scrivere in italiano, per un utente non esperto di CUDA:
+Write in English, for a user who is not a CUDA expert:
 
-- Cosa fa il tool e perché le onde quadre e i burst sono i test più severi per un alimentatore.
-- Requisiti, compilazione su Linux e Windows, esempi d'uso.
-- Come leggere la tabella e il grafico.
-- **Il verdetto reale**: se il PC arriva in fondo senza spegnersi, riavviarsi o andare in schermo nero,
-  il PSU regge. Il coil whine durante le onde quadre è normale.
-- Consiglio: per lo scenario peggiore, stressare **anche la CPU** in parallelo con `--cpu`
-  (in alternativa Prime95 Small FFTs, `stress-ng --cpu 0`, o OCCT), perché il PSU alimenta
-  tutto il sistema.
-- Controllare che il connettore 12V-2x6 sia inserito completamente e senza pieghe strette.
-- Per misurare davvero i picchi sotto il millisecondo servono strumenti hardware
-  (oscilloscopio con pinza amperometrica, NVIDIA PCAT, Elmorlabs PMD2).
-- Avvertenza: il test porta la GPU al massimo per minuti; usarlo con case ventilato e
-  interromperlo (Ctrl+C) se la temperatura supera livelli anomali.
+- What the tool does and why square waves and bursts are the hardest tests for a power supply.
+- Requirements, building on Linux and Windows, usage examples.
+- How to read the table and the chart.
+- **The real verdict**: if the PC reaches the end without shutting down, rebooting or going to a black screen,
+  the PSU holds up. Coil whine during the square waves is normal.
+- Advice: for the worst case, stress **the CPU as well** in parallel with `--cpu`
+  (alternatively Prime95 Small FFTs, `stress-ng --cpu 0`, or OCCT), because the PSU powers
+  the whole system.
+- Check that the 12V-2x6 connector is fully seated and without tight bends.
+- Measuring real sub-millisecond spikes requires hardware tools
+  (oscilloscope with current clamp, NVIDIA PCAT, ElmorLabs PMD2).
+- Warning: the test pushes the GPU to the maximum for minutes; use it in a well-ventilated case
+  and stop it (Ctrl+C) if the temperature reaches abnormal levels.
 
-## Cose da NON fare
+## Things NOT to do
 
-- Non aggiungere funzioni per superare il power limit o modificare voltaggi e clock:
-  il tool deve solo generare carico e osservare, senza cambiare impostazioni della GPU.
-- Non usare `cudaDeviceReset` o API che richiedono privilegi di amministratore.
-- Non introdurre dipendenze oltre CUDA, NVML e (per lo script) pandas/matplotlib.
-- Non riempire la coda dei lanci senza sincronizzare: i pattern devono restare precisi nel tempo.
+- Do not add features to exceed the power limit or change voltages and clocks:
+  the tool must only generate load and observe, without changing GPU settings.
+- Do not use `cudaDeviceReset` or APIs that require administrator privileges.
+- Do not introduce dependencies beyond CUDA, NVML and (for the script) pandas/matplotlib.
+- Do not flood the launch queue without synchronizing: the patterns must stay accurate in time.

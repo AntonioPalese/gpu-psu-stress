@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Grafico di potenza, clock SM e temperatura dal log CSV di gpu-psu-stress.
+"""Power, SM clock and temperature chart from the gpu-psu-stress CSV log.
 
-Uso:
+Usage:
     python scripts/plot_log.py power_log.csv [--out grafico.png] [--limit W]
 
-Senza --out il grafico viene mostrato in una finestra.
+Without --out the chart is shown in a window.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ EXPECTED_COLUMNS = [
     "sm_clock_MHz", "mem_clock_MHz", "temp_C",
 ]
 
-# Colori: serie categoriali in ordine fisso, inchiostri neutri per testo e assi.
+# Colors: categorical series in a fixed order, neutral inks for text and axes.
 C_AVG = "#2a78d6"
 C_INSTANT = "#eb6834"
 C_LIMIT = "#d03b3b"
@@ -40,7 +40,7 @@ def load_log(path: str) -> pd.DataFrame:
     if missing:
         sys.exit(f"Errore: colonne mancanti nel CSV: {', '.join(missing)}")
     df["phase"] = df["phase"].astype(str)
-    # -1 indica "non disponibile": diventa NaN, così non entra in grafici e statistiche.
+    # -1 means "not available": it becomes NaN, so it stays out of charts and statistics.
     for col in EXPECTED_COLUMNS[2:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         df.loc[df[col] < 0, col] = float("nan")
@@ -48,12 +48,12 @@ def load_log(path: str) -> pd.DataFrame:
 
 
 def segments(df: pd.DataFrame) -> list[tuple[str, float, float]]:
-    """Tratti contigui con la stessa fase: (nome, t_inizio, t_fine)."""
+    """Contiguous stretches with the same phase: (name, t_start, t_end)."""
     seg_id = (df["phase"] != df["phase"].shift()).cumsum()
     out = []
     for _, g in df.groupby(seg_id, sort=False):
         out.append((g["phase"].iloc[0], g["t_s"].iloc[0], g["t_s"].iloc[-1]))
-    # Ogni tratto si estende fino all'inizio del successivo, senza buchi.
+    # Each stretch extends to the start of the next one, with no gaps.
     for i in range(len(out) - 1):
         name, t0, _ = out[i]
         out[i] = (name, t0, out[i + 1][1])
@@ -108,7 +108,7 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
     fig.patch.set_facecolor(C_SURFACE)
     ax_p, ax_c, ax_t = axes
 
-    # Sfondo alternato per fase (le fasi nascoste restano senza banda).
+    # Alternating background per phase (hidden phases get no band).
     segs = segments(df)
     visible_idx = 0
     for name, t0, t1 in segs:
@@ -131,7 +131,7 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
                       color=C_TEXT_2, fontsize=8, zorder=5,
                       bbox={"facecolor": C_SURFACE, "edgecolor": "none", "alpha": 0.9, "pad": 1})
     ax_p.set_ylabel("Potenza (W)")
-    # Margine in alto: la legenda sta sopra i dati invece di coprire le fasi a pieno carico.
+    # Headroom at the top: the legend sits above the data instead of covering full-load phases.
     top = df[["power_avg_W", "power_instant_W"]].max().max()
     if limit:
         top = max(top, limit) if pd.notna(top) else limit
@@ -156,8 +156,8 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
         ax.grid(axis="y", color=C_BAND, lw=0.8, zorder=1)
         ax.margins(x=0)
 
-    # Etichette delle fasi visibili sopra il pannello della potenza (una per nome:
-    # i burst ripetuti vengono etichettati solo al primo ciclo).
+    # Labels of the visible phases above the power panel (one per name:
+    # repeated bursts are labeled only on the first cycle).
     labelled = set()
     for name, t0, t1 in segs:
         if is_hidden(name) or name in labelled:

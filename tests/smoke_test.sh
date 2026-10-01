@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Smoke test: esecuzione breve (--scale 0.05) che deve finire in meno di 30 s e produrre
-# un CSV con l'intestazione corretta e almeno una riga per ogni fase non nascosta.
+# Smoke test: short run (--scale 0.05) that must finish in under 30 s and produce
+# a CSV with the correct header and at least one row for every non-hidden phase.
 #
-# Uso: tests/smoke_test.sh [percorso/del/binario] [argomenti extra...]
-# Senza argomenti cerca il binario in build/ (Linux) o build/Release/ (Windows).
-# Esempio con il carico CPU: tests/smoke_test.sh "" --cpu
+# Usage: tests/smoke_test.sh [path/to/binary] [extra arguments...]
+# Without arguments it looks for the binary in build/ (Linux) or build/Release/ (Windows).
+# Example with the CPU load: tests/smoke_test.sh "" --cpu
 
 set -u
 
@@ -51,7 +51,7 @@ HEADER='t_s,phase,power_avg_W,power_instant_W,sm_clock_MHz,mem_clock_MHz,temp_C'
 first="$(head -n 1 "$CSV" | tr -d '\r')"
 [ "$first" = "$HEADER" ] || fail "intestazione errata: '$first'"
 
-# Fasi non nascoste attese nella sequenza predefinita.
+# Non-hidden phases expected in the default sequence.
 PHASES=(
     "Idle baseline"
     "FMA FP32 sostenuto"

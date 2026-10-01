@@ -1,6 +1,6 @@
 #pragma once
-// Calibrazione dei kernel e astrazione "Load": una funzione che lancia un carico di durata
-// nota su uno stream.
+// Kernel calibration and the "Load" abstraction: a function that launches a load of known
+// duration on a stream.
 
 #include <functional>
 #include <string>
@@ -10,12 +10,12 @@
 using ParamLaunch = std::function<void(cudaStream_t, int iters)>;
 using Launch = std::function<void(cudaStream_t)>;
 
-// Warm-up, poi 4 misure con cudaEvent che correggono 'iters' in proporzione fino a targetMs.
-// Stampa il risultato e restituisce il lancio con 'iters' fissato.
+// Warm-up, then 4 cudaEvent measurements that correct 'iters' proportionally until targetMs.
+// Prints the result and returns the launch with 'iters' fixed.
 Launch calibrate(const ParamLaunch& paramLaunch, cudaStream_t stream, double targetMs,
                  const std::string& name);
 
-// Buffer dei kernel e carichi calibrati. Non copiabile: i lanci catturano 'this'.
+// Kernel buffers and calibrated loads. Not copyable: the launches capture 'this'.
 class LoadSet {
 public:
     LoadSet() = default;
@@ -23,19 +23,19 @@ public:
     LoadSet(const LoadSet&) = delete;
     LoadSet& operator=(const LoadSet&) = delete;
 
-    // Alloca i buffer (dimensionati sul numero di SM) e calibra tutti i carichi.
+    // Allocates the buffers (sized on the SM count) and calibrates all loads.
     void init(const cudaDeviceProp& prop, cudaStream_t stream);
 
     Launch fma;       // FP32, 2 ms
-    Launch fmaShort;  // FP32, 0.5 ms (onde quadre ad alta frequenza)
+    Launch fmaShort;  // FP32, 0.5 ms (high-frequency square waves)
     Launch tensor;    // tensor core, 2 ms
-    Launch mem;       // memoria, 2 ms
+    Launch mem;       // memory, 2 ms
 
 private:
     float* fmaOut_ = nullptr;
     float* tensorOut_ = nullptr;
     float4* memBuf_[2] = {nullptr, nullptr};
     size_t memElems_ = 0;
-    int memFlip_ = 0;        // alterna sorgente e destinazione a ogni lancio
-    size_t memOffset_ = 0;   // punto di partenza del prossimo lancio di memBurn
+    int memFlip_ = 0;        // swaps source and destination on every launch
+    size_t memOffset_ = 0;   // starting point of the next memBurn launch
 };

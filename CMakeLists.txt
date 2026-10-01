@@ -1,24 +1,24 @@
 cmake_minimum_required(VERSION 3.24)
 
-# Architettura di default: Blackwell consumer (RTX 50xx, sm_120).
-# Sovrascrivibile, es.: -DCMAKE_CUDA_ARCHITECTURES=89 (Ada) o 86 (Ampere).
+# Default architecture: consumer Blackwell (RTX 50xx, sm_120).
+# Overridable, e.g.: -DCMAKE_CUDA_ARCHITECTURES=89 (Ada) or 86 (Ampere).
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 120 CACHE STRING "Architetture CUDA da compilare")
 endif()
 
-# Controlli prima di project(): se falliscono, il test del compilatore CUDA di CMake
-# produrrebbe errori poco chiari.
+# Checks before project(): if they fail, CMake's CUDA compiler test would produce
+# unclear errors.
 
-# Individua nvcc: CMAKE_CUDA_COMPILER, CUDA_PATH, CUDAToolkit_ROOT o PATH.
+# Locate nvcc: CMAKE_CUDA_COMPILER, CUDA_PATH, CUDAToolkit_ROOT or PATH.
 if(CMAKE_CUDA_COMPILER)
     set(_nvcc "${CMAKE_CUDA_COMPILER}")
 else()
     find_program(_nvcc nvcc HINTS "$ENV{CUDA_PATH}/bin" "$ENV{CUDAToolkit_ROOT}/bin" /usr/local/cuda/bin)
 endif()
 
-# Generatore Visual Studio: l'integrazione CUDA di MSBuild trova il toolkit solo tramite
-# CUDA_PATH o il registro. Se mancano, gli si passa la cartella del nvcc trovato
-# (equivale a -T "cuda=<cartella>").
+# Visual Studio generator: MSBuild's CUDA integration finds the toolkit only through
+# CUDA_PATH or the registry. If both are missing, pass it the folder of the nvcc found
+# (equivalent to -T "cuda=<folder>").
 if(CMAKE_GENERATOR MATCHES "^Visual Studio" AND _nvcc
    AND NOT CMAKE_GENERATOR_TOOLSET MATCHES "cuda=" AND "$ENV{CUDA_PATH}" STREQUAL "")
     get_filename_component(_cuda_root "${_nvcc}" DIRECTORY)
@@ -31,7 +31,7 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio" AND _nvcc
     message(STATUS "CUDA_PATH non impostata: uso il toolkit in ${_cuda_root}")
 endif()
 
-# Versione minima di CUDA per ogni architettura richiesta.
+# Minimum CUDA version for each requested architecture.
 set(_min_cuda 0)
 foreach(_arch IN LISTS CMAKE_CUDA_ARCHITECTURES)
     string(REGEX MATCH "^[0-9]+" _arch_num "${_arch}")
@@ -68,8 +68,8 @@ endif()
 
 project(gpu-psu-stress LANGUAGES CXX CUDA)
 
-# Su Windows anche il runtime C++ di MSVC è statico: niente Visual C++ Redistributable
-# sul PC di destinazione.
+# On Windows the MSVC C++ runtime is static too: no Visual C++ Redistributable needed
+# on the target PC.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 set(CMAKE_CXX_STANDARD 17)
@@ -94,18 +94,18 @@ add_executable(gpu-psu-stress
     src/report.cpp
 )
 
-# Runtime CUDA statico: l'eseguibile gira con il solo driver NVIDIA, senza CUDA installato.
-# NVML invece arriva sempre con il driver (nvml.dll / libnvidia-ml.so.1).
+# Static CUDA runtime: the executable runs with just the NVIDIA driver, without CUDA installed.
+# NVML instead always comes with the driver (nvml.dll / libnvidia-ml.so.1).
 set_target_properties(gpu-psu-stress PROPERTIES CUDA_RUNTIME_LIBRARY Static)
 target_link_libraries(gpu-psu-stress PRIVATE CUDA::cudart_static CUDA::nvml Threads::Threads)
 
 if(MSVC)
-    # Sorgenti e output in UTF-8 (accenti italiani).
+    # UTF-8 sources and output (Italian accented characters).
     target_compile_options(gpu-psu-stress PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:/utf-8>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>)
 endif()
 if(WIN32)
-    # timeBeginPeriod per una granularità di sleep di 1 ms.
+    # timeBeginPeriod for a 1 ms sleep granularity.
     target_link_libraries(gpu-psu-stress PRIVATE winmm)
 endif()

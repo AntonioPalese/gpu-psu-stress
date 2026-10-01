@@ -30,7 +30,7 @@ void formatInt(char* buf, size_t n, int v) {
 void printSummary(const std::vector<Sample>& samples, const std::vector<std::string>& phases,
                   double enforcedLimitW) {
     std::vector<PhaseStats> stats(phases.size());
-    std::vector<int> order;  // fasi nell'ordine della prima comparsa
+    std::vector<int> order;  // phases in order of first appearance
     double peakW = -1.0;
     std::string peakPhase;
 

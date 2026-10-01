@@ -1,114 +1,114 @@
 # gpu-psu-stress
 
-Un piccolo programma da riga di comando che mette sotto stress una scheda video NVIDIA per
-capire se l'**alimentatore (PSU)** regge i picchi di assorbimento. È pensato per una
-**RTX 5070 (250 W) con un alimentatore da 650 W**, ma funziona su qualsiasi GPU NVIDIA
-recente.
+A small command-line program that stresses an NVIDIA graphics card to find out whether the
+**power supply (PSU)** can handle its power spikes. It is designed for an
+**RTX 5070 (250 W) with a 650 W power supply**, but it works on any recent NVIDIA GPU.
 
-> ⚠️ **Avvertenza.** Il test porta la GPU al massimo per alcuni minuti. Usalo con il case
-> ben ventilato, tieni d'occhio la temperatura e interrompilo con **Ctrl+C** se sale a
-> livelli anomali (per una scheda desktop, stabilmente sopra gli 85-90 °C).
+The program's messages, summary table and phase names are in Italian; this guide quotes them
+as they appear and explains what they mean.
 
-## Cosa fa
+> ⚠️ **Warning.** The test pushes the GPU to the maximum for several minutes. Use it with a
+> well-ventilated case, keep an eye on the temperature and stop it with **Ctrl+C** if it
+> reaches abnormal levels (for a desktop card, steadily above 85-90 °C).
 
-1. **Genera carichi** sulla GPU in modo ripetibile:
-   - carichi **sostenuti** (calcolo FP32, tensor core, memoria, e tensor + memoria insieme);
-   - **onde quadre**: la GPU passa da pieno carico a zero e viceversa a 1, 2, 5, 10, 20, 50,
-     100 e 200 volte al secondo;
-   - **burst da idle**: la GPU resta ferma 3 secondi (i clock scendono al minimo), poi va al
-     massimo di colpo per 300 ms, per 10 volte.
-2. **Misura** potenza, clock e temperatura tramite NVML (la libreria di monitoraggio del
-   driver NVIDIA) in un thread separato.
-3. **Riassume** i risultati a schermo per ogni fase e **salva** tutti i campioni in un file CSV.
-4. Uno script Python separato **disegna il grafico** del CSV.
+## What it does
 
-### Perché onde quadre e burst sono i test più severi
+1. **Generates loads** on the GPU in a repeatable way:
+   - **sustained** loads (FP32 compute, tensor cores, memory, and tensor + memory together);
+   - **square waves**: the GPU switches from full load to zero and back 1, 2, 5, 10, 20, 50,
+     100 and 200 times per second;
+   - **bursts from idle**: the GPU stays idle for 3 seconds (clocks drop to the minimum), then
+     jumps to full load for 300 ms, 10 times.
+2. **Measures** power, clocks and temperature through NVML (the NVIDIA driver's monitoring
+   library) in a separate thread.
+3. **Summarizes** the results on screen for each phase and **saves** all samples to a CSV file.
+4. A separate Python script **plots** the CSV.
 
-Un carico costante è facile per un alimentatore: la tensione si stabilizza e i condensatori
-non devono fare nulla. I problemi nascono con i **cambi bruschi**: quando la GPU passa da
-quasi zero a pieno carico in pochi microsecondi, assorbe per un istante molto più della sua
-potenza nominale (transienti che su schede moderne possono arrivare a 1,5-2 volte il TGP).
-Se il picco supera le protezioni del PSU (OCP, sovracorrente, o OPP, sovrapotenza),
-l'alimentatore si spegne per sicurezza e il PC si spegne o si riavvia di colpo.
+### Why square waves and bursts are the hardest tests
 
-- Le **onde quadre** ripetono questi fronti centinaia di volte al secondo, a frequenze
-  diverse: alcune frequenze possono entrare in risonanza con il circuito di regolazione del PSU.
-- I **burst da idle** riproducono il caso peggiore reale: GPU ferma a clock minimi che riceve
-  all'improvviso un carico pesante (es. l'avvio di un gioco o di una scena).
+A constant load is easy for a power supply: the voltage settles and the capacitors have
+nothing to do. Problems come with **sudden changes**: when the GPU goes from almost zero to
+full load in a few microseconds, for an instant it draws much more than its rated power
+(transients that on modern cards can reach 1.5-2 times the TGP). If the spike exceeds the
+PSU protections (OCP, over-current, or OPP, over-power), the power supply shuts off for
+safety and the PC suddenly turns off or reboots.
 
-## Il limite importante: NVML non vede i picchi veri
+- **Square waves** repeat these edges hundreds of times per second, at different
+  frequencies: some frequencies can resonate with the PSU's regulation circuit.
+- **Bursts from idle** reproduce the real worst case: an idle GPU at minimum clocks that
+  suddenly receives a heavy load (e.g. starting a game or loading a scene).
 
-NVML campiona ogni ~10-100 ms e riporta valori mediati. I transienti che fanno scattare
-l'alimentatore durano **meno di un millisecondo**: il tool **non può misurarli**.
-Il tool li **provoca**; i numeri a schermo servono solo a confermare che i carichi stanno
-funzionando.
+## The key limitation: NVML cannot see the real spikes
 
-**Il verdetto reale è semplice**: se il PC arriva in fondo al test **senza spegnersi,
-riavviarsi o andare in schermo nero**, l'alimentatore regge. Il **coil whine** (fischio o
-ronzio elettrico) durante le onde quadre è **normale** e non indica un guasto.
+NVML samples every ~10-100 ms and reports averaged values. The transients that trip the
+power supply last **less than a millisecond**: the tool **cannot measure them**.
+The tool **causes** them; the numbers on screen only confirm that the loads are working.
 
-Per misurare davvero i picchi sotto il millisecondo servono strumenti hardware:
-oscilloscopio con pinza amperometrica, NVIDIA PCAT, Elmorlabs PMD2 o simili.
+**The real verdict is simple**: if the PC reaches the end of the test **without shutting
+down, rebooting or going to a black screen**, the power supply holds up. **Coil whine**
+(electrical whistling or buzzing) during the square waves is **normal** and is not a fault.
 
-## Consigli per un test serio
+Measuring real sub-millisecond spikes requires hardware tools: an oscilloscope with a
+current clamp, NVIDIA PCAT, ElmorLabs PMD2 or similar.
 
-- **Stressa anche la CPU in parallelo.** L'alimentatore alimenta tutto il sistema, e lo
-  scenario peggiore è CPU e GPU al massimo insieme. Basta aggiungere **`--cpu`**: il programma
-  carica tutti i core della CPU per tutta la durata del test, senza software esterni.
-  In alternativa puoi usare Prime95 (Small FFTs), OCCT o, su Linux, `stress-ng --cpu 0`.
-  Il programma non può leggere temperatura e potenza della CPU: tienile d'occhio con il
-  monitor della scheda madre o con HWiNFO.
-- **Controlla il connettore 12V-2x6** (o 12VHPWR) della scheda: deve essere inserito
-  **fino in fondo**, senza spazi visibili, e il cavo non deve avere pieghe strette vicino
-  al connettore.
-- Chiudi giochi e altri programmi che usano la GPU, così i carichi sono ripetibili.
+## Tips for a serious test
 
-Per una procedura completa passo per passo (prova breve, solo GPU, GPU + CPU, ripetizioni,
-come interpretare uno spegnimento) e una descrizione dei software citati, vedi
-[docs/procedura-test-5070.md](docs/procedura-test-5070.md).
+- **Stress the CPU at the same time.** The power supply feeds the whole system, and the
+  worst case is CPU and GPU at full load together. Just add **`--cpu`**: the program loads
+  all CPU cores for the whole duration of the test, with no external software.
+  Alternatively you can use Prime95 (Small FFTs), OCCT or, on Linux, `stress-ng --cpu 0`.
+  The program cannot read CPU temperature and power: keep an eye on them with the
+  motherboard monitor or HWiNFO.
+- **Check the card's 12V-2x6 connector** (or 12VHPWR): it must be **fully seated**, with no
+  visible gap, and the cable must not have tight bends near the connector.
+- Close games and other programs that use the GPU, so that the loads are repeatable.
 
-## Requisiti
+For a complete step-by-step procedure (short trial, GPU only, GPU + CPU, repetitions,
+how to interpret a shutdown) and a description of the tools mentioned, see
+[docs/test-procedure-5070.md](docs/test-procedure-5070.md).
 
-- GPU NVIDIA con driver recente.
-- **CUDA Toolkit ≥ 12.8** per compilare per le RTX 50xx (Blackwell, sm_120). Per GPU più
-  vecchie basta un toolkit che supporti la loro architettura (vedi sotto).
+## Requirements
+
+- NVIDIA GPU with a recent driver.
+- **CUDA Toolkit ≥ 12.8** to build for the RTX 50xx (Blackwell, sm_120). For older GPUs
+  any toolkit that supports their architecture is enough (see below).
 - **CMake ≥ 3.24**.
-- Un compilatore C++17: GCC o Clang su Linux, **Visual Studio 2022** (con il componente
-  "Sviluppo di applicazioni desktop con C++") su Windows.
-- Per il grafico: **Python 3.10+** con `pandas` e `matplotlib`.
+- A C++17 compiler: GCC or Clang on Linux, **Visual Studio 2022** (with the
+  "Desktop development with C++" workload) on Windows.
+- For the chart: **Python 3.10+** with `pandas` and `matplotlib`.
 
-## Compilazione
+## Building
 
-Per default il programma viene compilato per la **RTX 50xx** (compute capability 12.0).
-Per un'altra GPU passa `-DCMAKE_CUDA_ARCHITECTURES` con la sua compute capability senza
-punto: `89` per le RTX 40xx (Ada), `86` per le RTX 30xx (Ampere), `75` per Turing.
-Puoi trovarla con `nvidia-smi --query-gpu=name,compute_cap --format=csv`.
+By default the program is built for the **RTX 50xx** (compute capability 12.0).
+For another GPU pass `-DCMAKE_CUDA_ARCHITECTURES` with its compute capability without the
+dot: `89` for RTX 40xx (Ada), `86` for RTX 30xx (Ampere), `75` for Turing.
+You can find it with `nvidia-smi --query-gpu=name,compute_cap --format=csv`.
 
 ### Linux
 
 ```bash
 cmake -B build                  # RTX 50xx
-# oppure: cmake -B build -DCMAKE_CUDA_ARCHITECTURES=89
+# or: cmake -B build -DCMAKE_CUDA_ARCHITECTURES=89
 cmake --build build -j
 ./build/gpu-psu-stress
 ```
 
-#### Linux senza CUDA installato (container)
+#### Linux without CUDA installed (container)
 
-Se non vuoi installare il toolkit CUDA, lo script `scripts/build_linux.sh` compila dentro un
-container ufficiale NVIDIA con CUDA 12.8. Serve solo **podman** o **docker**, e funziona anche
-da Windows (Git Bash, con Podman Desktop o Docker Desktop):
+If you do not want to install the CUDA toolkit, the `scripts/build_linux.sh` script builds
+inside an official NVIDIA container with CUDA 12.8. You only need **podman** or **docker**,
+and it also works from Windows (Git Bash, with Podman Desktop or Docker Desktop):
 
 ```bash
 scripts/build_linux.sh            # RTX 50xx
-scripts/build_linux.sh "89;120"   # più architetture in un solo binario
-./build-linux/gpu-psu-stress      # sul PC Linux con la GPU
+scripts/build_linux.sh "89;120"   # several architectures in a single binary
+./build-linux/gpu-psu-stress      # on the Linux PC with the GPU
 ```
 
-Il primo avvio scarica l'immagine CUDA (alcuni GB). Il binario prodotto richiede sul PC
-Linux soltanto il driver NVIDIA.
+The first run downloads the CUDA image (a few GB). The resulting binary only needs the
+NVIDIA driver on the Linux PC.
 
-### Windows (Prompt dei comandi o PowerShell)
+### Windows (Command Prompt or PowerShell)
 
 ```bat
 cmake -B build
@@ -116,144 +116,147 @@ cmake --build build --config Release
 build\Release\gpu-psu-stress.exe
 ```
 
-Se la variabile d'ambiente `CUDA_PATH` non è impostata, CMake usa automaticamente il
-toolkit del `nvcc` che trova nel `PATH`. Se compare comunque l'errore
-*"The CUDA Toolkit directory '' does not exist"*, cancella la cartella `build` (conserva la
-configurazione fallita) e indica il percorso esplicitamente:
+If the `CUDA_PATH` environment variable is not set, CMake automatically uses the toolkit
+of the `nvcc` it finds in the `PATH`. If you still get the error
+*"The CUDA Toolkit directory '' does not exist"*, delete the `build` folder (it keeps the
+failed configuration) and give the path explicitly:
 
 ```bat
 cmake -B build -T "cuda=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.8"
 ```
 
-### Compilare su un PC senza la GPU di destinazione
+### Building on a PC without the target GPU
 
-Per compilare non serve avere la scheda: basta il toolkit CUDA giusto. Si può anche creare
-**un solo eseguibile per più GPU**, ad esempio per provarlo sul PC di sviluppo (qui una
-scheda Turing, `75`) e poi usarlo sulla RTX 5070 (`120`):
+You do not need the card to build: the right CUDA toolkit is enough. You can also create
+**a single executable for several GPUs**, for example to try it on the development PC (here a
+Turing card, `75`) and then use it on the RTX 5070 (`120`):
 
 ```bat
 cmake -B build -DCMAKE_CUDA_ARCHITECTURES="75;120"
 cmake --build build --config Release
 ```
 
-- Serve **CUDA 12.8 o 12.9**, che si può installare accanto a una versione più vecchia.
-  Nell'installazione personalizzata puoi togliere il driver e tenere quello attuale.
-- CUDA 13.x richiede un driver ≥ 580: un eseguibile compilato con CUDA 13 non parte sui PC
-  con driver più vecchi.
-- Sul PC di destinazione **non serve installare CUDA**: basta il driver NVIDIA (il runtime
-  CUDA è incluso nell'eseguibile, NVML arriva con il driver). Su Windows anche il runtime
-  C++ è incluso, quindi non serve il Visual C++ Redistributable.
+- You need **CUDA 12.8 or 12.9**, which can be installed next to an older version.
+  In the custom installation you can deselect the driver and keep the current one.
+- CUDA 13.x requires driver ≥ 580: an executable built with CUDA 13 does not start on PCs
+  with older drivers.
+- On the target PC you **do not need to install CUDA**: the NVIDIA driver is enough (the
+  CUDA runtime is embedded in the executable, NVML comes with the driver). On Windows the
+  C++ runtime is embedded too, so the Visual C++ Redistributable is not needed.
 
-## Uso
+## Usage
 
 ```
 gpu-psu-stress [--scale X] [--sample-ms N] [--device N] [--out file.csv]
                [--only sustained|square|burst] [--cpu | --cpu-threads N] [--list]
 ```
 
-| Opzione | Significato |
+| Option | Meaning |
 |---|---|
-| `--scale X` | moltiplica tutte le durate (default 1.0, circa 4 minuti compresi i cooldown). I burst da 300 ms non vengono scalati. |
-| `--sample-ms N` | periodo di campionamento NVML in millisecondi (default 10, minimo 1) |
-| `--device N` | quale GPU usare, se ne hai più di una (default 0) |
-| `--out FILE` | nome del file CSV (default `power_log.csv`) |
-| `--only GRUPPO` | esegue solo `sustained`, `square` o `burst` (più l'idle iniziale) |
-| `--cpu` | carica anche la CPU al massimo, in parallelo alla GPU, con un thread per processore logico (vedi sotto) |
-| `--cpu-threads N` | come `--cpu`, ma con N thread (1-1024) |
-| `--list` | mostra la sequenza delle fasi con le durate ed esce, senza toccare la GPU |
+| `--scale X` | multiplies all durations (default 1.0, about 4 minutes including cooldowns). The 300 ms bursts are not scaled. |
+| `--sample-ms N` | NVML sampling period in milliseconds (default 10, minimum 1) |
+| `--device N` | which GPU to use, if you have more than one (default 0) |
+| `--out FILE` | CSV file name (default `power_log.csv`) |
+| `--only GROUP` | runs only `sustained`, `square` or `burst` (plus the initial idle) |
+| `--cpu` | also loads the CPU to the maximum, in parallel with the GPU, with one thread per logical processor (see below) |
+| `--cpu-threads N` | like `--cpu`, but with N threads (1-1024) |
+| `--list` | shows the phase sequence with durations and exits, without touching the GPU |
 
-Esempi:
+Examples:
 
 ```bash
-gpu-psu-stress                          # test completo
-gpu-psu-stress --list                   # cosa verrà eseguito e quanto dura
-gpu-psu-stress --only square            # solo le onde quadre
-gpu-psu-stress --scale 2 --out lungo.csv   # test lungo il doppio
-gpu-psu-stress --scale 0.05             # prova veloce (~20 s) per vedere se tutto funziona
-gpu-psu-stress --cpu --scale 2          # caso peggiore: GPU e CPU al massimo insieme
+gpu-psu-stress                          # full test
+gpu-psu-stress --list                   # what will run and how long it takes
+gpu-psu-stress --only square            # square waves only
+gpu-psu-stress --scale 2 --out long.csv # test twice as long
+gpu-psu-stress --scale 0.05             # quick run (~20 s) to check that everything works
+gpu-psu-stress --cpu --scale 2          # worst case: GPU and CPU at full load together
 ```
 
-### Il carico CPU (`--cpu`)
+### The CPU load (`--cpu`)
 
-- Parte **dopo la calibrazione** della GPU, poi c'è una fase di riscaldamento di 30 s
-  (moltiplicati per `--scale`) perché il consumo della CPU si stabilizzi. Da lì resta al
-  massimo per **tutto il test**, idle compresi: la CPU è sempre carica mentre la GPU fa i
-  transienti, come con OCCT o Prime95 in sottofondo.
-- Ogni thread esegue calcoli in virgola mobile senza sosta, con istruzioni **AVX2+FMA** se la
-  CPU le supporta (quasi tutte le CPU dal 2013 in poi), altrimenti con istruzioni normali.
-- I thread hanno **priorità bassa**: la CPU resta al 100%, ma il thread che pilota la GPU e
-  il monitor NVML vengono serviti per primi, così i tempi delle onde quadre restano precisi.
-- A fine test viene stampata una riga come
-  `Carico CPU: 20 thread (AVX2+FMA), 614.0 GFLOPS medi per 58 s`, che conferma che il carico
-  ha girato. Se il valore cala molto da un test all'altro, la CPU si sta surriscaldando.
-- Temperatura e potenza della CPU **non** sono misurate (servirebbero privilegi di
-  amministratore) e non finiscono nel CSV.
+- It starts **after the GPU calibration**, followed by a 30 s warm-up phase (multiplied by
+  `--scale`) so that the CPU power draw can settle. From then on it stays at the maximum for
+  **the whole test**, idle phases included: the CPU is always loaded while the GPU produces
+  the transients, as with OCCT or Prime95 running in the background.
+- Each thread runs floating-point computations non-stop, with **AVX2+FMA** instructions if
+  the CPU supports them (almost every CPU since 2013), otherwise with regular instructions.
+- The threads run at **low priority**: the CPU stays at 100%, but the thread driving the GPU
+  and the NVML monitor are served first, so the square-wave timing stays accurate.
+- At the end of the test a line like
+  `Carico CPU: 20 thread (AVX2+FMA), 614.0 GFLOPS medi per 58 s` ("CPU load: 20 threads,
+  614.0 average GFLOPS over 58 s") confirms that the load ran. If the value drops a lot from
+  one test to the next, the CPU is overheating.
+- CPU temperature and power are **not** measured (that would require administrator
+  privileges) and are not in the CSV.
 
-**Ctrl+C** interrompe il test in qualsiasi momento: i carichi si fermano e il riepilogo e il
-CSV vengono scritti comunque con i dati raccolti fino a quel punto (codice di uscita 130).
+**Ctrl+C** stops the test at any time: the loads stop and the summary and the CSV are still
+written with the data collected up to that point (exit code 130).
 
-### Sequenza predefinita
+### Default sequence
 
-| Fase | Durata |
-|---|---|
-| Idle baseline | 5 s |
-| FMA FP32 sostenuto | 20 s |
-| Tensor FP16 sostenuto | 20 s |
-| Memoria VRAM sostenuto | 15 s |
-| Tensor + memoria (max) | 30 s |
-| Onde quadre 1, 2, 5, 10, 20, 50, 100, 200 Hz | 10 s ciascuna |
-| Burst da idle: 10 cicli (3 s idle + 300 ms di carico) | ~33 s |
+| Phase | Name in the output | Duration |
+|---|---|---|
+| Idle baseline | `Idle baseline` | 5 s |
+| Sustained FP32 FMA | `FMA FP32 sostenuto` | 20 s |
+| Sustained FP16 tensor | `Tensor FP16 sostenuto` | 20 s |
+| Sustained VRAM | `Memoria VRAM sostenuto` | 15 s |
+| Tensor + memory (max) | `Tensor + memoria (max)` | 30 s |
+| Square waves 1, 2, 5, 10, 20, 50, 100, 200 Hz | `Onda quadra N Hz` | 10 s each |
+| Bursts from idle: 10 cycles (3 s idle + 300 ms load) | `Burst da idle` | ~33 s |
 
-Tra una fase e l'altra c'è un cooldown di 5 s (3 s dopo ogni onda quadra). Prima di
-iniziare, il programma **calibra** i carichi per qualche secondo in modo che ogni lancio duri
-un tempo preciso (2 ms, o 0,5 ms per le onde quadre): per questo il comportamento è simile
-su GPU diverse.
+Between phases there is a 5 s cooldown (3 s after each square wave). Before starting, the
+program **calibrates** the loads for a few seconds so that each launch lasts a precise time
+(2 ms, or 0.5 ms for the square waves): this is why the behavior is similar across GPUs.
 
-## Come leggere i risultati
+## Reading the results
 
-### All'avvio
+### At startup
 
-Il programma stampa nome della GPU, numero di SM, compute capability, VRAM, power limit
-attivo e di default, e se la GPU fornisce la potenza istantanea. Poi mostra quanta VRAM usa
-il test di memoria e il risultato della calibrazione di ogni carico.
+The program prints the GPU name, SM count, compute capability, VRAM, enforced and default
+power limit, and whether the GPU provides instantaneous power. Then it shows how much VRAM
+the memory test uses and the calibration result of each load.
 
-Il test di memoria occupa **tutta la VRAM libera**, lasciando un margine per il desktop e gli
-altri programmi (512 MB o il 5% della VRAM, il valore più grande), ad esempio:
+The memory test takes **all free VRAM**, leaving a margin for the desktop and other
+programs (512 MB or 5% of the VRAM, whichever is larger), for example:
 
 ```
   Memoria: 2 buffer da 5.20 GB = 10.40 GB su 11.94 GB di VRAM (87%), 0.62 GB lasciati liberi
 ```
 
-(valori indicativi: dipendono da quanta VRAM usano già lo schermo e gli altri programmi).
-Durante il test la memoria viene percorsa tutta, un pezzo per lancio.
+("Memory: 2 buffers of 5.20 GB = 10.40 GB out of 11.94 GB of VRAM (87%), 0.62 GB left free";
+indicative values: they depend on how much VRAM the display and other programs already use).
+During the test the whole memory is swept, one chunk per launch.
 
-### La tabella finale
+### The final table
 
-| Colonna | Significato |
+| Column | Meaning |
 |---|---|
-| Campioni | quante misure NVML sono state prese nella fase |
-| Media W | potenza media della fase |
-| Max W | massimo della potenza media riportata da NVML |
-| Max ist. W | massimo della potenza "istantanea" NVML (`n/d` se la GPU/driver non la fornisce) |
-| Max SM MHz | clock massimo dei core |
-| Max temp | temperatura massima in °C |
+| `Fase` | phase |
+| `Campioni` | how many NVML samples were taken in the phase |
+| `Media W` | average power of the phase |
+| `Max W` | maximum of the average power reported by NVML |
+| `Max ist. W` | maximum of the NVML "instantaneous" power (`n/d` = not available, if the GPU/driver does not provide it) |
+| `Max SM MHz` | maximum core clock |
+| `Max temp` | maximum temperature in °C |
 
-Sotto la tabella c'è il **picco globale** e la sua percentuale rispetto al power limit attivo.
-Valori intorno al 100% del power limit nei carichi sostenuti sono normali: la scheda lavora
-al massimo consentito. Ricorda però che i transienti veri, invisibili a NVML, sono più alti.
+Below the table there is the **global peak** (`Picco globale`) and its percentage of the
+enforced power limit. Values around 100% of the power limit in the sustained loads are
+normal: the card is working at the maximum allowed. Remember, though, that the real
+transients, invisible to NVML, are higher.
 
-Cose da notare:
-- nelle **onde quadre ad alta frequenza** la media è circa la metà del carico pieno: NVML
-  media i cicli on/off. È atteso;
-- se i **clock SM** calano molto mentre la temperatura sale, la GPU sta andando in
-  *thermal throttling*: migliora la ventilazione.
+Things to note:
+- in the **high-frequency square waves** the average is about half of the full load: NVML
+  averages the on/off cycles. This is expected;
+- if the **SM clocks** drop a lot while the temperature rises, the GPU is
+  *thermal throttling*: improve the ventilation.
 
-### Il grafico
+### The chart
 
-Il modo più semplice è con [uv](https://docs.astral.sh/uv/): il file `pyproject.toml` nella
-cartella del progetto elenca le dipendenze, e uv crea da solo l'ambiente in `.venv`.
+The easiest way is with [uv](https://docs.astral.sh/uv/): the `pyproject.toml` file in the
+project folder lists the dependencies, and uv creates the environment in `.venv` by itself.
 
-Installazione di uv (una volta sola):
+Installing uv (once):
 
 ```bash
 # Windows (PowerShell)
@@ -262,56 +265,57 @@ winget install astral-sh.uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Poi, dalla cartella del progetto (i comandi sono uguali su Windows e Linux):
+Then, from the project folder (the commands are the same on Windows and Linux):
 
 ```bash
-uv sync                                       # solo la prima volta
-uv run scripts/plot_log.py power_log.csv --out grafico.png --limit 250
+uv sync                                       # first time only
+uv run scripts/plot_log.py power_log.csv --out chart.png --limit 250
 ```
 
-Su un server Linux senza interfaccia grafica usa sempre `--out`: senza, lo script prova ad
-aprire una finestra.
+On a Linux server without a graphical interface always use `--out`: without it, the script
+tries to open a window.
 
-In alternativa, con pip:
+Alternatively, with pip:
 
 ```bash
 pip install pandas matplotlib
-python scripts/plot_log.py power_log.csv --out grafico.png --limit 250
+python scripts/plot_log.py power_log.csv --out chart.png --limit 250
 ```
 
-Senza `--out` il grafico si apre in una finestra. `--limit W` disegna una linea tratteggiata
-(ad esempio al TGP della scheda). Lo script stampa anche la stessa tabella riassuntiva.
+Without `--out` the chart opens in a window. `--limit W` draws a dashed line
+(for example at the card's TGP). The script also prints the same summary table.
 
-Il grafico ha tre pannelli con lo stesso asse del tempo:
-1. **Potenza**: media (blu) e, se disponibile, istantanea (arancione);
-2. **Clock SM**;
-3. **Temperatura**.
+The chart has three panels sharing the same time axis:
+1. **Power**: average (blue) and, if available, instantaneous (orange);
+2. **SM clock**;
+3. **Temperature**.
 
-Le fasce grigie alternate separano le fasi, con il nome scritto in alto; i cooldown non
-hanno etichetta. Nelle onde quadre dovresti vedere la potenza oscillare (alle frequenze
-basse) o stabilizzarsi a un valore intermedio (alle alte); nei burst, dieci picchi netti.
+The alternating gray bands separate the phases, with the name written at the top; cooldowns
+have no label. In the square waves you should see the power oscillate (at low frequencies)
+or settle at an intermediate value (at high ones); in the bursts, ten sharp peaks.
 
-## Formato del CSV
+## CSV format
 
 ```
 t_s,phase,power_avg_W,power_instant_W,sm_clock_MHz,mem_clock_MHz,temp_C
 ```
 
-Una riga per campione: tempo in secondi dall'inizio del test, nome della fase, potenza media
-e istantanea in watt, clock SM e memoria in MHz, temperatura in °C. Il valore **-1** indica
-una misura non disponibile. Le fasi il cui nome inizia con `_` (cooldown, idle tra i burst)
-sono nel CSV ma non nel riepilogo.
+One row per sample: time in seconds since the start of the test, phase name, average and
+instantaneous power in watts, SM and memory clocks in MHz, temperature in °C. The value
+**-1** means the measurement is not available. Phases whose name starts with `_` (cooldown,
+idle between bursts) are in the CSV but not in the summary.
 
-## Test
+## Tests
 
 ```bash
-tests/smoke_test.sh            # esecuzione breve con --scale 0.05, deve durare < 30 s
+tests/smoke_test.sh            # short run with --scale 0.05, must take < 30 s
+tests/smoke_test.sh "" --cpu   # same, with the CPU load
 ```
 
-Su Windows eseguilo da Git Bash. Controlla che il CSV esista, abbia l'intestazione corretta
-e contenga almeno una riga per ogni fase.
+On Windows run it from Git Bash. It checks that the CSV exists, has the correct header
+and contains at least one row for every phase.
 
-## Cosa il tool NON fa
+## What the tool does NOT do
 
-Il programma **genera solo carico e osserva**: non modifica power limit, clock, voltaggi o
-altre impostazioni della GPU e non richiede privilegi di amministratore.
+The program **only generates load and observes**: it does not change the power limit,
+clocks, voltages or any other GPU setting, and it does not require administrator privileges.

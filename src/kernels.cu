@@ -5,8 +5,8 @@
 
 __global__ void __launch_bounds__(kFmaThreads) fmaBurn(float* out, int iters) {
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    // Valori iniziali dentro [-1.9, 1.9]: la mappa x^2 - 1.9 resta limitata (niente inf/NaN)
-    // ma è caotica, quindi i bit commutano molto.
+    // Initial values inside [-1.9, 1.9]: the map x^2 - 1.9 stays bounded (no inf/NaN)
+    // but is chaotic, so bits toggle a lot.
     float x[8];
 #pragma unroll
     for (int k = 0; k < 8; ++k) x[k] = -1.5f + 0.37f * k + 1e-7f * (tid & 1023);
@@ -32,7 +32,7 @@ __global__ void __launch_bounds__(kTensorThreads) tensorBurn(float* out, int ite
     using namespace nvcuda;
     __shared__ __half sA[256];
     __shared__ __half sB[256];
-    // Valori piccoli e non nulli: gli accumulatori crescono lentamente senza overflow.
+    // Small non-zero values: the accumulators grow slowly without overflowing.
     for (int i = threadIdx.x; i < 256; i += blockDim.x) {
         sA[i] = __float2half(0.01f * float((i * 7 + blockIdx.x) % 17 - 8));
         sB[i] = __float2half(0.01f * float((i * 5 + 3) % 13 - 6));
@@ -49,7 +49,7 @@ __global__ void __launch_bounds__(kTensorThreads) tensorBurn(float* out, int ite
     wmma::fill_fragment(c2, 0.0f);
     wmma::fill_fragment(c3, 0.0f);
 
-    // 4 accumulatori indipendenti: le mma_sync non dipendono l'una dall'altra (ILP).
+    // 4 independent accumulators: the mma_sync calls do not depend on each other (ILP).
     for (int i = 0; i < iters; ++i) {
         wmma::mma_sync(c0, a, b, c0);
         wmma::mma_sync(c1, a, b, c1);
@@ -60,7 +60,7 @@ __global__ void __launch_bounds__(kTensorThreads) tensorBurn(float* out, int ite
     for (int k = 0; k < c0.num_elements; ++k) c0.x[k] += c1.x[k] + c2.x[k] + c3.x[k];
     wmma::store_matrix_sync(dst, c0, 16, wmma::mem_row_major);
 #else
-    // Architetture senza tensor core (< sm_70): ripiego su FMA, per non avere un kernel vuoto.
+    // Architectures without tensor cores (< sm_70): fall back to FMA, to avoid an empty kernel.
     float x = -1.5f + 1e-7f * threadIdx.x;
     for (int i = 0; i < iters; ++i) {
 #pragma unroll
@@ -78,15 +78,15 @@ __global__ void __launch_bounds__(kMemThreads)
     size_t remaining = size_t(iters) * kMemChunkElems;
     size_t pos = start % n;
 
-    // Segmenti contigui [pos, pos + seg): dal punto di partenza fino alla fine del buffer,
-    // poi di nuovo da 0. Le condizioni del ciclo sono uguali per tutti i thread.
+    // Contiguous segments [pos, pos + seg): from the starting point to the end of the buffer,
+    // then again from 0. The loop conditions are the same for all threads.
     while (remaining > 0) {
         const size_t seg = (remaining < n - pos) ? remaining : n - pos;
         const size_t lim = pos + seg;
         remaining -= seg;
         for (size_t i = pos + tid; i < lim; i += stride) {
             float4 v = src[i];
-            // Trasformazione contrattiva: i valori restano limitati lancio dopo lancio.
+            // Contractive transform: values stay bounded launch after launch.
             v.x = fmaf(v.x, -0.999f, 0.001f);
             v.y = fmaf(v.y, -0.999f, 0.002f);
             v.z = fmaf(v.z, -0.999f, 0.003f);

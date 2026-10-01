@@ -11,8 +11,8 @@
 
 namespace {
 
-// VRAM lasciata libera per il desktop e gli altri programmi: il massimo tra 512 MB e il 5%
-// della VRAM totale. Su Windows lo schermo è di solito collegato alla stessa GPU.
+// VRAM left free for the desktop and other programs: the larger of 512 MB and 5% of the
+// total VRAM. On Windows the display is usually connected to the same GPU.
 constexpr size_t kMemReserveMin = size_t(512) << 20;
 constexpr double kMemReserveFraction = 0.05;
 
@@ -40,7 +40,7 @@ Launch calibrate(const ParamLaunch& paramLaunch, cudaStream_t stream, double tar
     CK(cudaEventCreate(&a));
     CK(cudaEventCreate(&b));
 
-    // Stima grossolana: aumenta 'iters' finché il kernel dura almeno 1/10 dell'obiettivo.
+    // Rough estimate: increase 'iters' until the kernel lasts at least 1/10 of the target.
     int iters = 1;
     double ms = measureMs(paramLaunch, stream, iters, a, b);
     while (ms < targetMs / 10.0 && iters < INT_MAX / 32) {
@@ -48,14 +48,14 @@ Launch calibrate(const ParamLaunch& paramLaunch, cudaStream_t stream, double tar
         ms = measureMs(paramLaunch, stream, iters, a, b);
     }
 
-    // Warm-up: ~200 ms di carico, così i clock salgono prima delle misure.
+    // Warm-up: ~200 ms of load, so the clocks ramp up before the measurements.
     const auto warmEnd = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
     while (std::chrono::steady_clock::now() < warmEnd) {
         paramLaunch(stream, iters);
         CK(cudaStreamSynchronize(stream));
     }
 
-    // 4 misure con correzione proporzionale.
+    // 4 measurements with proportional correction.
     ms = measureMs(paramLaunch, stream, iters, a, b);
     for (int r = 0; r < 4; ++r) {
         iters = scaleIters(iters, targetMs / std::max(ms, 1e-3));
@@ -80,9 +80,9 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
     CK(cudaMalloc(&fmaOut_, sizeof(float) * fmaBlocks * kFmaThreads));
     CK(cudaMalloc(&tensorOut_, sizeof(float) * tensorBlocks * kTensorWarps * 256));
 
-    // Buffer di memoria: tutta la VRAM libera meno un margine, divisa in 2 buffer che si
-    // alternano come sorgente e destinazione. La VRAM totale viene dalle proprietà della GPU,
-    // quella libera da cudaMemGetInfo (esclude ciò che usano già il desktop e gli altri programmi).
+    // Memory buffers: all free VRAM minus a margin, split into 2 buffers that alternate as
+    // source and destination. Total VRAM comes from the GPU properties, free VRAM from
+    // cudaMemGetInfo (it excludes what the desktop and other programs already use).
     const size_t totalB = prop.totalGlobalMem;
     size_t freeB = 0, totalInfo = 0;
     CK(cudaMemGetInfo(&freeB, &totalInfo));
@@ -91,14 +91,14 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
     const size_t align = kMemChunkElems * sizeof(float4);
     size_t bytes = freeB > reserve ? (freeB - reserve) / 2 : 0;
     bytes -= bytes % align;
-    // cudaMemGetInfo è una stima: se l'allocazione fallisce si riprova con il 5% in meno.
+    // cudaMemGetInfo is an estimate: if the allocation fails, retry with 5% less.
     while (bytes >= align) {
         const cudaError_t e0 = cudaMalloc(&memBuf_[0], bytes);
         const cudaError_t e1 = (e0 == cudaSuccess) ? cudaMalloc(&memBuf_[1], bytes) : e0;
         if (e1 == cudaSuccess) break;
         if (e0 == cudaSuccess) cudaFree(memBuf_[0]);
         memBuf_[0] = memBuf_[1] = nullptr;
-        (void)cudaGetLastError();  // azzera l'errore di allocazione (non permanente)
+        (void)cudaGetLastError();  // clears the (non-sticky) allocation error
         bytes = bytes / 20 * 19;
         bytes -= bytes % align;
     }
@@ -130,8 +130,8 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
         const float4* src = memBuf_[memFlip_];
         float4* dst = memBuf_[memFlip_ ^ 1];
         memFlip_ ^= 1;
-        // Ogni lancio riparte da dove si è fermato il precedente: in pochi lanci viene
-        // percorsa tutta la VRAM allocata, non solo i primi GB.
+        // Each launch resumes where the previous one stopped: within a few launches all the
+        // allocated VRAM is swept, not just the first GBs.
         const size_t start = memOffset_;
         memOffset_ = (memOffset_ + size_t(iters) * kMemChunkElems) % memElems_;
         memBurn<<<memBlocks, kMemThreads, 0, s>>>(src, dst, memElems_, start, iters);
@@ -140,15 +140,15 @@ void LoadSet::init(const cudaDeviceProp& prop, cudaStream_t stream) {
 
     std::printf("Calibrazione dei carichi...\n");
     fma = calibrate(fmaP, stream, 2.0, "FMA");
-    // Onde quadre e burst usano l'FMA: sulla RTX 5070 è il carico che assorbe di più
-    // (~245 W, al power limit) contro i ~100 W del kernel tensor.
+    // Square waves and bursts use FMA: on the RTX 5070 it is the most power-hungry load
+    // (~245 W, at the power limit) versus ~100 W for the tensor kernel.
     fmaShort = calibrate(fmaP, stream, 0.5, "FMA short");
     tensor = calibrate(tensorP, stream, 2.0, "Tensor");
     mem = calibrate(memP, stream, 2.0, "Memoria");
 }
 
 LoadSet::~LoadSet() {
-    // Nessun CK qui: il distruttore può girare durante l'uscita del programma.
+    // No CK here: the destructor may run while the program is exiting.
     cudaFree(fmaOut_);
     cudaFree(tensorOut_);
     cudaFree(memBuf_[0]);

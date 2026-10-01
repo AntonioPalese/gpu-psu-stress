@@ -17,7 +17,7 @@ Clock::time_point after(Clock::time_point t, double sec) {
     return t + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(sec));
 }
 
-// Sleep a piccoli passi, per reagire subito a Ctrl+C.
+// Sleeps in small steps, to react immediately to Ctrl+C.
 void sleepUntil(Clock::time_point end) {
     while (!g_stopRequested) {
         auto now = Clock::now();
@@ -26,7 +26,7 @@ void sleepUntil(Clock::time_point end) {
     }
 }
 
-// Un giro di carico: lancia tutto, poi aspetta tutti gli stream (niente code di lanci).
+// One round of load: launch everything, then wait for all streams (no launch queueing).
 void runOnce(const std::vector<StreamLoad>& loads) {
     for (const StreamLoad& l : loads) l.launch(l.stream);
     for (const StreamLoad& l : loads) CK(cudaStreamSynchronize(l.stream));
@@ -62,20 +62,20 @@ void squareWave(Monitor& mon, double hz, const Launch& shortLoad, cudaStream_t s
     const auto start = Clock::now();
     const auto end = after(start, sec);
 
-    // Scadenze calcolate dall'inizio della fase: nessuna deriva tra un periodo e l'altro.
+    // Deadlines computed from the start of the phase: no drift from one period to the next.
     for (long k = 0; !g_stopRequested; ++k) {
         const auto t0 = after(start, k * period);
         if (t0 >= end) break;
         const auto onEnd = std::min(after(start, (k + 0.5) * period), end);
         const auto offEnd = std::min(after(start, (k + 1) * period), end);
 
-        // Metà periodo a pieno carico: lanci brevi sincronizzati, così il fronte di discesa
-        // arriva al massimo ~0.5 ms dopo la scadenza.
+        // Half period at full load: short synchronized launches, so the falling edge
+        // comes at most ~0.5 ms after the deadline.
         while (!g_stopRequested && Clock::now() < onEnd) {
             shortLoad(stream);
             CK(cudaStreamSynchronize(stream));
         }
-        // Spin-wait: sleep avrebbe una granularità troppo grossa (~15 ms su Windows).
+        // Spin-wait: sleep would have too coarse a granularity (~15 ms on Windows).
         while (!g_stopRequested && Clock::now() < offEnd) {
         }
     }

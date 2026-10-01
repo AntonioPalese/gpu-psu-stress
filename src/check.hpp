@@ -1,6 +1,6 @@
 #pragma once
-// Macro di controllo errori per CUDA runtime (CK) e NVML (NK).
-// In caso di errore stampano chiamata, file e riga, poi terminano il programma.
+// Error-checking macros for the CUDA runtime (CK) and NVML (NK).
+// On error they print the call, file and line, then terminate the program.
 
 #include <cstdio>
 #include <cstdlib>

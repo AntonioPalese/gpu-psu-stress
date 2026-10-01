@@ -22,14 +22,14 @@
 
 namespace {
 
-constexpr uint64_t kChunk = uint64_t(1) << 20;  // iterazioni tra due controlli dello stop (~1 ms)
-constexpr double kFlopsAvx2 = 8 * 8 * 2;         // 8 registri x 8 float x (mul + add)
-constexpr double kFlopsScalar = 8 * 2;           // 8 catene x (mul + add)
+constexpr uint64_t kChunk = uint64_t(1) << 20;  // iterations between two stop checks (~1 ms)
+constexpr double kFlopsAvx2 = 8 * 8 * 2;         // 8 registers x 8 floats x (mul + add)
+constexpr double kFlopsScalar = 8 * 2;           // 8 chains x (mul + add)
 
-// Il risultato finisce qui, così il compilatore non elimina il calcolo.
+// The result ends up here, so the compiler does not eliminate the computation.
 std::atomic<float> g_sink{0.0f};
 
-// Supporto AVX2 + FMA, compreso il salvataggio dei registri ymm da parte del sistema operativo.
+// AVX2 + FMA support, including saving of the ymm registers by the operating system.
 bool detectAvx2Fma() {
 #if defined(CPU_LOAD_X86) && defined(_MSC_VER)
     int r[4];
@@ -40,7 +40,7 @@ bool detectAvx2Fma() {
     const bool osxsave = (r[2] & (1 << 27)) != 0;
     const bool avx = (r[2] & (1 << 28)) != 0;
     if (!fma || !osxsave || !avx) return false;
-    if ((_xgetbv(0) & 6) != 6) return false;  // stato XMM e YMM abilitato dal SO
+    if ((_xgetbv(0) & 6) != 6) return false;  // XMM and YMM state enabled by the OS
     __cpuidex(r, 7, 0);
     return (r[1] & (1 << 5)) != 0;  // AVX2
 #elif defined(CPU_LOAD_X86) && (defined(__GNUC__) || defined(__clang__))
@@ -51,8 +51,8 @@ bool detectAvx2Fma() {
 #endif
 }
 
-// Stessa mappa caotica del kernel GPU: x = x*x - 1.9 resta in [-1.97, 1.97] (niente inf/NaN)
-// ma fa commutare molti bit. 8 catene indipendenti tengono occupate entrambe le unità FMA.
+// Same chaotic map as the GPU kernel: x = x*x - 1.9 stays in [-1.97, 1.97] (no inf/NaN)
+// but toggles many bits. 8 independent chains keep both FMA units busy.
 #ifdef CPU_LOAD_X86
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((target("avx2,fma")))
@@ -100,8 +100,8 @@ float burnScalar(uint64_t iters, float seed) {
     return sum;
 }
 
-// Priorità bassa: la CPU resta al 100%, ma il thread che pilota la GPU e il monitor NVML
-// vengono eseguiti per primi, così i tempi dei pattern restano precisi.
+// Low priority: the CPU stays at 100%, but the thread driving the GPU and the NVML monitor
+// run first, so the pattern timing stays accurate.
 void lowerThreadPriority() {
 #ifdef _WIN32
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);

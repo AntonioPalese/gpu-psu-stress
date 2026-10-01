@@ -1,16 +1,16 @@
 #pragma once
-// Riepilogo a schermo per fase e scrittura del log CSV.
+// On-screen per-phase summary and CSV log writing.
 
 #include <string>
 #include <vector>
 
 #include "monitor.hpp"
 
-// Stampa la tabella per fase (escluse le fasi nascoste), il picco globale e l'avviso sui
-// transienti. enforcedLimitW <= 0 significa power limit non disponibile.
+// Prints the per-phase table (hidden phases excluded), the global peak and the transient
+// warning. enforcedLimitW <= 0 means the power limit is unavailable.
 void printSummary(const std::vector<Sample>& samples, const std::vector<std::string>& phases,
                   double enforcedLimitW);
 
-// Scrive tutti i campioni (fasi nascoste comprese). Restituisce false in caso di errore.
+// Writes all samples (hidden phases included). Returns false on error.
 bool writeCsv(const std::string& path, const std::vector<Sample>& samples,
               const std::vector<std::string>& phases);
