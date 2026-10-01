@@ -14,7 +14,8 @@ The tool must:
 3. **Summarize** the results on screen per phase and **save** a complete CSV log.
 4. **Visualize** the log with a separate Python script.
 
-Known limitation, always to be documented: NVML samples every ~10–100 ms and **cannot measure**
+Known limitation, always to be documented: NVML updates every ~10–500 ms (~500 ms on the
+RTX 5070 with driver 595.79, both average and instantaneous power) and **cannot measure**
 sub-millisecond transients. The tool causes them; the real verdict is whether the system
 shuts down or reboots (PSU OCP/OPP tripping).
 

@@ -37,8 +37,10 @@ safety and the PC suddenly turns off or reboots.
 
 ## The key limitation: NVML cannot see the real spikes
 
-NVML samples every ~10-100 ms and reports averaged values. The transients that trip the
-power supply last **less than a millisecond**: the tool **cannot measure them**.
+NVML updates its readings every ~10-500 ms and reports averaged values (on the RTX 5070 with
+driver 595.79 both the average and the "instantaneous" power change only every ~500 ms, even
+if the tool samples every 10 ms). The transients that trip the power supply last **less than
+a millisecond**: the tool **cannot measure them**.
 The tool **causes** them; the numbers on screen only confirm that the loads are working.
 
 **The real verdict is simple**: if the PC reaches the end of the test **without shutting
@@ -244,6 +246,12 @@ transients, invisible to NVML, are higher.
 Things to note:
 - in the **high-frequency square waves** the average is about half of the full load: NVML
   averages the on/off cycles. This is expected;
+- at **2 Hz** `Max inst. W` can be much lower than `Max W` (e.g. 40 W instead of 140 W): with
+  readings updated every ~500 ms, the "instantaneous" value always falls in the same half of
+  the 500 ms period (aliasing). The load is there anyway, as the average shows;
+- the 300 ms **bursts** are shorter than the NVML update interval: their power and clocks
+  often show up in the samples *after* the burst (in the hidden idle phase), so the
+  `Burst from idle` row underestimates them. The chart shows them better;
 - if the **SM clocks** drop a lot while the temperature rises, the GPU is
   *thermal throttling*: improve the ventilation.
 

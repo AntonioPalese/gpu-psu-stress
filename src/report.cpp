@@ -48,8 +48,10 @@ void printSummary(const std::vector<Sample>& samples, const std::vector<std::str
         ps.smClockMax = std::max(ps.smClockMax, s.smClockMHz);
         ps.tempMax = std::max(ps.tempMax, s.tempC);
 
+        // Hidden phases are excluded from the peak too: right after calibration the NVML
+        // readings still lag behind (e.g. ~210 W in "_CPU warm-up" with the GPU idle).
         double p = std::max(s.powerAvgW, s.powerInstantW);
-        if (p > peakW) {
+        if (p > peakW && !Monitor::isHidden(phases[s.phase])) {
             peakW = p;
             peakPhase = phases[s.phase];
         }
@@ -84,7 +86,7 @@ void printSummary(const std::vector<Sample>& samples, const std::vector<std::str
     }
 
     std::printf(
-        "\nWARNING: NVML samples every ~10-100 ms and does NOT see sub-millisecond transients,\n"
+        "\nWARNING: NVML updates every ~10-500 ms and does NOT see sub-millisecond transients,\n"
         "which can be much higher than the values above. This tool causes them: the real\n"
         "verdict is whether the PC reaches the end without shutting down or rebooting.\n");
     std::fflush(stdout);

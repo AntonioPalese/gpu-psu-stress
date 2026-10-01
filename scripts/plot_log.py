@@ -75,10 +75,11 @@ def print_summary(df: pd.DataFrame, limit: float | None) -> None:
               f"{fmt(g['power_avg_W'].max()):>9} {fmt(g['power_instant_W'].max()):>12} "
               f"{fmt(g['sm_clock_MHz'].max(), 0):>10} {fmt(g['temp_C'].max(), 0):>8}")
     print("-" * len(header))
-    peak = df[["power_avg_W", "power_instant_W"]].max(axis=1)
+    # Like the C++ report: hidden phases are excluded from the peak as well.
+    peak = visible[["power_avg_W", "power_instant_W"]].max(axis=1)
     if peak.notna().any():
         i = peak.idxmax()
-        line = f"Global peak: {peak[i]:.1f} W (phase \"{df.loc[i, 'phase']}\")"
+        line = f"Global peak: {peak[i]:.1f} W (phase \"{visible.loc[i, 'phase']}\")"
         if limit:
             line += f", {100 * peak[i] / limit:.0f}% of the given limit ({limit:.0f} W)"
         print(line)
