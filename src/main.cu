@@ -225,21 +225,35 @@ void onSignal(int) { g_stopRequested = true; }
 
 double limitW(nvmlReturn_t r, unsigned int mw) { return (r == NVML_SUCCESS && mw > 0) ? mw / 1000.0 : -1.0; }
 
+// Enforced power limit in W, or -1 if NVML does not report it; err receives the NVML result.
+// The query must be a separate statement: in limitW(query(&mw), mw) the argument evaluation
+// order is unspecified, and MSVC reads mw (still 0) before the query writes it.
+double activeLimitW(nvmlDevice_t h, nvmlReturn_t* err = nullptr) {
+    unsigned int mw = 0;
+    nvmlReturn_t r = nvmlDeviceGetEnforcedPowerLimit(h, &mw);
+    if (err) *err = r;
+    return limitW(r, mw);
+}
+
 void printGpuInfo(int device, const cudaDeviceProp& prop, const Monitor& mon) {
-    unsigned int enforced = 0, def = 0;
-    double enforcedW = limitW(nvmlDeviceGetEnforcedPowerLimit(mon.handle(), &enforced), enforced);
-    double defW = limitW(nvmlDeviceGetPowerManagementDefaultLimit(mon.handle(), &def), def);
-    auto fmt = [](double w) {
-        char b[32];
-        if (w < 0) std::snprintf(b, sizeof(b), "n/d");
-        else std::snprintf(b, sizeof(b), "%.0f W", w);
+    unsigned int def = 0;
+    nvmlReturn_t enforcedErr = NVML_SUCCESS;
+    double enforcedW = activeLimitW(mon.handle(), &enforcedErr);
+    nvmlReturn_t defErr = nvmlDeviceGetPowerManagementDefaultLimit(mon.handle(), &def);
+    double defW = limitW(defErr, def);
+    // "n/d" plus the NVML reason, so an unreadable limit can be diagnosed from the log.
+    auto fmt = [](double w, nvmlReturn_t err) {
+        char b[96];
+        if (w >= 0) std::snprintf(b, sizeof(b), "%.0f W", w);
+        else if (err != NVML_SUCCESS) std::snprintf(b, sizeof(b), "n/d (NVML: %s)", nvmlErrorString(err));
+        else std::snprintf(b, sizeof(b), "n/d");
         return std::string(b);
     };
     std::printf("GPU %d: %s\n", device, prop.name);
     std::printf("  SM: %d | compute capability %d.%d | VRAM %.1f GB\n", prop.multiProcessorCount,
                 prop.major, prop.minor, prop.totalGlobalMem / (1024.0 * 1024.0 * 1024.0));
-    std::printf("  Power limit attivo: %s | di default: %s\n", fmt(enforcedW).c_str(),
-                fmt(defW).c_str());
+    std::printf("  Power limit attivo: %s | di default: %s\n", fmt(enforcedW, enforcedErr).c_str(),
+                fmt(defW, defErr).c_str());
     std::printf("  Potenza istantanea NVML: %s\n\n",
                 mon.instantPowerSupported() ? "disponibile" : "non disponibile (colonna = -1)");
 }
@@ -327,8 +341,7 @@ int main(int argc, char** argv) {
     const bool interrupted = g_stopRequested;
     if (interrupted) std::printf("\nInterrotto dall'utente: salvo i dati raccolti finora.\n");
 
-    unsigned int enforced = 0;
-    double enforcedW = limitW(nvmlDeviceGetEnforcedPowerLimit(mon.handle(), &enforced), enforced);
+    double enforcedW = activeLimitW(mon.handle());
     const auto samples = mon.samples();
     const auto phases = mon.phaseNames();
     printSummary(samples, phases, enforcedW);
