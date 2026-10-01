@@ -49,9 +49,18 @@ architetture e applica il requisito più alto (12.8).
 
 ## Verifica (dopo l'installazione di CUDA 12.x)
 
-- [ ] `cmake -B build -DCMAKE_CUDA_ARCHITECTURES="75;120"` e la build terminano senza errori.
-- [ ] `cuobjdump --list-elf build\Release\gpu-psu-stress.exe` mostra sia `sm_75` sia `sm_120`.
-- [ ] `bash tests/smoke_test.sh` passa sulla MX550 in meno di 30 s.
-- [ ] `compute-sanitizer --tool memcheck build\Release\gpu-psu-stress.exe --scale 0.02`
+Eseguita il 2026-10-01 con CUDA 12.8.61, driver 573.76, sulla MX550.
+
+- [x] `cmake -B build -DCMAKE_CUDA_ARCHITECTURES="75;120"` e la build terminano senza errori
+      né warning (CMake trova da solo CUDA 12.8).
+- [x] `cuobjdump --list-elf build\Release\gpu-psu-stress.exe` mostra sia `sm_75` sia `sm_120`.
+      Il kernel tensor per sm_120 usa istruzioni `HMMA.16816.F32` (tensor core).
+- [x] `bash tests/smoke_test.sh` passa sulla MX550 in 17 s.
+- [x] `compute-sanitizer --tool memcheck build\Release\gpu-psu-stress.exe --scale 0.02`
       riporta 0 errori.
-- [ ] All'avvio, controllare la riga "Potenza istantanea NVML" (sulla MX550 e poi sulla 5070).
+- [x] Riga "Potenza istantanea NVML" sulla MX550: "disponibile", ma il valore coincide con la
+      media (stesso massimo, 31,94 W). Probabilmente il driver per portatili restituisce lo
+      stesso sensore.
+- [ ] Sulla 5070: controllare la riga "Potenza istantanea NVML" e che nella tabella
+      "Max ist. W" sia diversa da "Max W" (segno che la lettura istantanea funziona davvero).
+- [ ] Sulla 5070: eseguire il test completo (il codice sm_120 non è mai stato eseguito).
