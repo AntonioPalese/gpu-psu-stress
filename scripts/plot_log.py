@@ -131,7 +131,14 @@ def plot(df: pd.DataFrame, out: str | None, limit: float | None, title: str) -> 
                       color=C_TEXT_2, fontsize=8, zorder=5,
                       bbox={"facecolor": C_SURFACE, "edgecolor": "none", "alpha": 0.9, "pad": 1})
     ax_p.set_ylabel("Potenza (W)")
-    ax_p.set_ylim(bottom=0)
+    # Margine in alto: la legenda sta sopra i dati invece di coprire le fasi a pieno carico.
+    top = df[["power_avg_W", "power_instant_W"]].max().max()
+    if limit:
+        top = max(top, limit) if pd.notna(top) else limit
+    if pd.notna(top) and top > 0:
+        ax_p.set_ylim(0, top * 1.22)
+    else:
+        ax_p.set_ylim(bottom=0)
     leg = ax_p.legend(loc="upper left", fontsize=8, labelcolor=C_TEXT_2, framealpha=0.9,
                       facecolor=C_SURFACE, edgecolor="none")
     leg.set_zorder(5)
