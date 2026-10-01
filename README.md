@@ -61,6 +61,10 @@ oscilloscopio con pinza amperometrica, NVIDIA PCAT, Elmorlabs PMD2 o simili.
   al connettore.
 - Chiudi giochi e altri programmi che usano la GPU, così i carichi sono ripetibili.
 
+Per una procedura completa passo per passo (prova breve, solo GPU, GPU + CPU, ripetizioni,
+come interpretare uno spegnimento) e una descrizione dei software citati, vedi
+[docs/procedura-test-5070.md](docs/procedura-test-5070.md).
+
 ## Requisiti
 
 - GPU NVIDIA con driver recente.
